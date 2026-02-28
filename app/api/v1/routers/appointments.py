@@ -1,0 +1,140 @@
+﻿from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from app.core.security import require_roles, get_current_user
+from app.db.deps import get_db
+from app.crud.service import get_service
+from app.crud.professional import get_professional
+from app.crud.appointment import (
+    list_appointments,
+    list_appointments_by_client,
+    list_appointments_by_professional_and_date,
+    get_appointment,
+    create_appointment,
+    update_appointment,
+    add_history,
+)
+from app.schemas.appointment import AppointmentOut, AppointmentCreate, AppointmentReschedule, AppointmentNotes
+
+router = APIRouter()
+
+
+def _ensure_available(db: Session, professional_id: int, date: str, time: str, appointment_id: int | None = None):
+    existing = list_appointments_by_professional_and_date(db, professional_id, date)
+    for apt in existing:
+        if appointment_id is not None and apt.id == appointment_id:
+            continue
+        if apt.time == time and apt.status != "cancelled":
+            raise HTTPException(status_code=409, detail="Slot not available")
+
+
+@router.post("", response_model=AppointmentOut, dependencies=[Depends(require_roles("client", "admin"))])
+def create_one(payload: AppointmentCreate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    svc = get_service(db, payload.service_id)
+    pro = get_professional(db, payload.professional_id)
+    if not svc or not pro:
+        raise HTTPException(status_code=404, detail="Service or professional not found")
+
+    _ensure_available(db, payload.professional_id, payload.date, payload.time)
+
+    client_name = payload.client_name or current_user.name
+    client_email = payload.client_email or current_user.email
+    client_phone = payload.client_phone or current_user.phone or ""
+
+    data = {
+        "client_name": client_name,
+        "client_email": client_email,
+        "client_phone": client_phone,
+        "service_id": payload.service_id,
+        "professional_id": payload.professional_id,
+        "date": payload.date,
+        "time": payload.time,
+        "status": "confirmed",
+        "notes": payload.notes or "",
+        "history": [],
+    }
+    apt = create_appointment(db, data)
+    add_history(apt, "Creada por cliente" if current_user.role == "client" else "Creada por admin")
+    db.commit()
+    db.refresh(apt)
+    return apt
+
+
+@router.get("/my", response_model=list[AppointmentOut], dependencies=[Depends(require_roles("client"))])
+def my_appointments(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    return list_appointments_by_client(db, current_user.email)
+
+
+@router.get("", response_model=list[AppointmentOut], dependencies=[Depends(require_roles("admin"))])
+def list_all(db: Session = Depends(get_db)):
+    return list_appointments(db)
+
+
+@router.get("/{appointment_id}", response_model=AppointmentOut)
+def get_one(appointment_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    apt = get_appointment(db, appointment_id)
+    if not apt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    if current_user.role != "admin" and apt.client_email != current_user.email:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    return apt
+
+
+@router.post("/{appointment_id}/confirm", response_model=AppointmentOut, dependencies=[Depends(require_roles("admin"))])
+def confirm(appointment_id: int, payload: AppointmentNotes | None = None, db: Session = Depends(get_db)):
+    apt = get_appointment(db, appointment_id)
+    if not apt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    update_data = {"status": "confirmed"}
+    if payload and payload.notes is not None:
+        update_data["notes"] = payload.notes
+    apt = update_appointment(db, apt, update_data)
+    add_history(apt, "Confirmada")
+    db.commit()
+    db.refresh(apt)
+    return apt
+
+
+@router.post("/{appointment_id}/cancel", response_model=AppointmentOut)
+def cancel(appointment_id: int, payload: AppointmentNotes | None = None, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    apt = get_appointment(db, appointment_id)
+    if not apt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    if current_user.role != "admin" and apt.client_email != current_user.email:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    update_data = {"status": "cancelled"}
+    if payload and payload.notes is not None:
+        update_data["notes"] = payload.notes
+    apt = update_appointment(db, apt, update_data)
+    add_history(apt, "Cancelada")
+    db.commit()
+    db.refresh(apt)
+    return apt
+
+
+@router.post("/{appointment_id}/attend", response_model=AppointmentOut, dependencies=[Depends(require_roles("admin", "professional"))])
+def attend(appointment_id: int, payload: AppointmentNotes | None = None, db: Session = Depends(get_db)):
+    apt = get_appointment(db, appointment_id)
+    if not apt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    update_data = {"status": "attended"}
+    if payload and payload.notes is not None:
+        update_data["notes"] = payload.notes
+    apt = update_appointment(db, apt, update_data)
+    add_history(apt, "Atendida")
+    db.commit()
+    db.refresh(apt)
+    return apt
+
+
+@router.post("/{appointment_id}/reschedule", response_model=AppointmentOut, dependencies=[Depends(require_roles("admin"))])
+def reschedule(appointment_id: int, payload: AppointmentReschedule, db: Session = Depends(get_db)):
+    apt = get_appointment(db, appointment_id)
+    if not apt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    _ensure_available(db, apt.professional_id, payload.date, payload.time, appointment_id=apt.id)
+    apt = update_appointment(db, apt, {"date": payload.date, "time": payload.time, "status": "rescheduled"})
+    add_history(apt, f"Reprogramada a {payload.date} {payload.time}")
+    db.commit()
+    db.refresh(apt)
+    return apt
