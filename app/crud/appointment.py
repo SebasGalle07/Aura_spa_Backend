@@ -3,6 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.appointment import Appointment
+from app.models.service import Service
 
 
 def list_appointments(db: Session):
@@ -19,6 +20,18 @@ def list_appointments_by_professional_and_date(db: Session, professional_id: int
         Appointment.date == date,
     )
     return list(db.scalars(stmt).all())
+
+
+def list_appointments_by_professional_and_date_with_duration(db: Session, professional_id: int, date: str):
+    stmt = (
+        select(Appointment, Service.duration)
+        .join(Service, Appointment.service_id == Service.id)
+        .where(
+            Appointment.professional_id == professional_id,
+            Appointment.date == date,
+        )
+    )
+    return list(db.execute(stmt).all())
 
 
 def get_appointment(db: Session, appointment_id: int):

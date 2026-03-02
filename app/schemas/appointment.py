@@ -1,5 +1,5 @@
 ﻿from typing import Literal
-from pydantic import EmailStr
+from pydantic import EmailStr, Field
 
 from app.schemas.common import BaseSchema
 
@@ -33,7 +33,7 @@ class AppointmentOut(BaseSchema):
     time: str
     status: Status
     notes: str | None = ""
-    history: list[AppointmentHistoryItem] = []
+    history: list[AppointmentHistoryItem] = Field(default_factory=list)
 
 
 class AppointmentReschedule(BaseSchema):

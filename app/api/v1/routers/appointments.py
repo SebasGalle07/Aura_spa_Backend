@@ -8,7 +8,7 @@ from app.crud.professional import get_professional
 from app.crud.appointment import (
     list_appointments,
     list_appointments_by_client,
-    list_appointments_by_professional_and_date,
+    list_appointments_by_professional_and_date_with_duration,
     get_appointment,
     create_appointment,
     update_appointment,
@@ -19,12 +19,30 @@ from app.schemas.appointment import AppointmentOut, AppointmentCreate, Appointme
 router = APIRouter()
 
 
-def _ensure_available(db: Session, professional_id: int, date: str, time: str, appointment_id: int | None = None):
-    existing = list_appointments_by_professional_and_date(db, professional_id, date)
-    for apt in existing:
+def _to_minutes(time_str: str) -> int:
+    h, m = [int(x) for x in time_str.split(":")]
+    return h * 60 + m
+
+
+def _ensure_available(
+    db: Session,
+    professional_id: int,
+    date: str,
+    time: str,
+    duration: int,
+    appointment_id: int | None = None,
+):
+    existing = list_appointments_by_professional_and_date_with_duration(db, professional_id, date)
+    start = _to_minutes(time)
+    end = start + duration
+    for apt, apt_duration in existing:
         if appointment_id is not None and apt.id == appointment_id:
             continue
-        if apt.time == time and apt.status != "cancelled":
+        if apt.status == "cancelled":
+            continue
+        apt_start = _to_minutes(apt.time)
+        apt_end = apt_start + (apt_duration or duration)
+        if start < apt_end and apt_start < end:
             raise HTTPException(status_code=409, detail="Slot not available")
 
 
@@ -35,7 +53,7 @@ def create_one(payload: AppointmentCreate, db: Session = Depends(get_db), curren
     if not svc or not pro:
         raise HTTPException(status_code=404, detail="Service or professional not found")
 
-    _ensure_available(db, payload.professional_id, payload.date, payload.time)
+    _ensure_available(db, payload.professional_id, payload.date, payload.time, svc.duration)
 
     client_name = payload.client_name or current_user.name
     client_email = payload.client_email or current_user.email
@@ -132,7 +150,10 @@ def reschedule(appointment_id: int, payload: AppointmentReschedule, db: Session 
     apt = get_appointment(db, appointment_id)
     if not apt:
         raise HTTPException(status_code=404, detail="Appointment not found")
-    _ensure_available(db, apt.professional_id, payload.date, payload.time, appointment_id=apt.id)
+    svc = get_service(db, apt.service_id)
+    if not svc:
+        raise HTTPException(status_code=404, detail="Service not found")
+    _ensure_available(db, apt.professional_id, payload.date, payload.time, svc.duration, appointment_id=apt.id)
     apt = update_appointment(db, apt, {"date": payload.date, "time": payload.time, "status": "rescheduled"})
     add_history(apt, f"Reprogramada a {payload.date} {payload.time}")
     db.commit()
