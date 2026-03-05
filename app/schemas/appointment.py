@@ -3,7 +3,7 @@ from pydantic import EmailStr, Field
 
 from app.schemas.common import BaseSchema
 
-Status = Literal["pending", "confirmed", "cancelled", "attended", "rescheduled"]
+Status = Literal["confirmed", "cancelled", "attended", "rescheduled"]
 
 
 class AppointmentHistoryItem(BaseSchema):

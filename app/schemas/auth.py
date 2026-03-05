@@ -13,7 +13,7 @@ class LoginRequest(BaseSchema):
 class Token(BaseSchema):
     model_config = ConfigDict(populate_by_name=True)
     access_token: str
-    refresh_token: str
+    refresh_token: str | None = None
     token_type: str = "bearer"
     user: UserOut
 

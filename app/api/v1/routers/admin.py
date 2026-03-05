@@ -22,7 +22,6 @@ def summary(date: str | None = None, db: Session = Depends(get_db)):
         "date": target_date,
         "today_total": len(today_apts),
         "confirmed": len([a for a in appointments if a.status == "confirmed"]),
-        "pending": len([a for a in appointments if a.status == "pending"]),
         "attended": len([a for a in appointments if a.status == "attended"]),
         "cancelled": len([a for a in appointments if a.status == "cancelled"]),
         "rescheduled": len([a for a in appointments if a.status == "rescheduled"]),

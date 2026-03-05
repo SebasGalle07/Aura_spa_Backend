@@ -18,8 +18,8 @@ pip install -r requirements.txt
 ## Variables de entorno
 - `DATABASE_URL` (default: `postgresql+psycopg://postgres:argus@localhost:5432/aura_spa`)
 - `SECRET_KEY` (default: `CHANGE_ME`)
-- `ACCESS_TOKEN_EXPIRE_MINUTES` (default: `1440`)
-- `BACKEND_CORS_ORIGINS` (default: `http://localhost:5173`)
+- `ACCESS_TOKEN_EXPIRE_MINUTES` (default: `10`)
+- `BACKEND_CORS_ORIGINS` (default: `http://localhost:4200`)
 - `MEDIA_ROOT` (default: `media`)
 - `MEDIA_URL` (default: `/media`)
 - `SEED_ON_STARTUP` (default: `true`)
@@ -52,7 +52,7 @@ uvicorn app.main:app --reload
 
 ## Notas
 - El seeder es idempotente y toma los mismos datos iniciales que el frontend (servicios, profesionales, citas y usuarios).
-- CORS esta habilitado para `http://localhost:5173`. Cambialo con `BACKEND_CORS_ORIGINS`.
+- CORS esta habilitado para `http://localhost:4200`. Cambialo con `BACKEND_CORS_ORIGINS`.
 - Las imagenes de servicios se guardan en `MEDIA_ROOT` y se sirven en `MEDIA_URL` (por defecto `/media/services/...`).
 
 ## Endpoints principales
@@ -61,6 +61,10 @@ Base URL: `http://localhost:8000/api/v1`
 **Auth**
 - `POST /auth/register`
 - `POST /auth/login`
+- `POST /auth/refresh`
+- `POST /auth/logout`
+- `POST /auth/forgot-password`
+- `POST /auth/reset-password`
 - `GET /auth/me`
 
 **Services**

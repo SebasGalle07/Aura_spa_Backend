@@ -1,4 +1,5 @@
-﻿from sqlalchemy.orm import Session
+﻿from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.models.company import CompanyData
 from app.schemas.company import CompanyUpdate, BrandingUpdate
@@ -13,8 +14,13 @@ def get_or_create_company(db: Session):
     if company is None:
         company = CompanyData(id=1)
         db.add(company)
-        db.commit()
-        db.refresh(company)
+        try:
+            db.commit()
+            db.refresh(company)
+        except IntegrityError:
+            # Another request inserted id=1 first.
+            db.rollback()
+            company = get_company(db)
     return company
 
 

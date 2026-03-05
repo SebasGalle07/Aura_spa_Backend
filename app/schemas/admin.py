@@ -6,7 +6,6 @@ class AdminSummary(BaseSchema):
     date: str
     today_total: int
     confirmed: int
-    pending: int
     attended: int
     cancelled: int
     rescheduled: int

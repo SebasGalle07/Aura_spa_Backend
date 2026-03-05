@@ -1,6 +1,7 @@
 ﻿from datetime import datetime, timedelta
 from hashlib import sha256
 from typing import Iterable
+from uuid import uuid4
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -36,8 +37,16 @@ def _hash_token(token: str) -> str:
 
 
 def _create_token(subject: str, token_type: str, expires_delta: timedelta) -> str:
-    expire = datetime.utcnow() + expires_delta
-    to_encode = {"exp": expire, "sub": subject, "type": token_type}
+    now = datetime.utcnow()
+    expire = now + expires_delta
+    to_encode = {
+        "exp": expire,
+        "iat": now,
+        "sub": subject,
+        "type": token_type,
+        # Avoid issuing identical JWTs in the same second.
+        "jti": uuid4().hex,
+    }
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 

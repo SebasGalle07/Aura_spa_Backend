@@ -14,14 +14,14 @@ class Settings(BaseSettings):
 
     SECRET_KEY: str = "CHANGE_ME"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     RESET_TOKEN_EXPIRE_MINUTES: int = 30
     RETURN_RESET_TOKEN: bool = True
 
     DATABASE_URL: str = "postgresql+psycopg://postgres:CHANGE_ME@localhost:5432/aura_spa"
 
-    BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:5173"]
+    BACKEND_CORS_ORIGINS: str | list[str] = "http://localhost:4200"
 
     MEDIA_ROOT: str = "media"
     MEDIA_URL: str = "/media"
@@ -35,6 +35,7 @@ class Settings(BaseSettings):
         if v is None:
             return []
         if isinstance(v, str):
+            # Allow a plain comma-separated string in env vars on Cloud Run.
             return [i.strip() for i in v.split(",") if i.strip()]
         return v
 
