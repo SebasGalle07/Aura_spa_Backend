@@ -1,4 +1,5 @@
 ﻿from datetime import datetime, timedelta
+from hashlib import sha256
 from typing import Iterable
 
 from fastapi import Depends, HTTPException, status
@@ -30,12 +31,32 @@ def validate_password_length(password: str) -> None:
         raise HTTPException(status_code=400, detail="Password too long (max 72 bytes)")
 
 
+def _hash_token(token: str) -> str:
+    return sha256(token.encode("utf-8")).hexdigest()
+
+
+def _create_token(subject: str, token_type: str, expires_delta: timedelta) -> str:
+    expire = datetime.utcnow() + expires_delta
+    to_encode = {"exp": expire, "sub": subject, "type": token_type}
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
 def create_access_token(subject: str, expires_delta: timedelta | None = None) -> str:
     if expires_delta is None:
         expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    expire = datetime.utcnow() + expires_delta
-    to_encode = {"exp": expire, "sub": subject}
-    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return _create_token(subject, "access", expires_delta)
+
+
+def create_refresh_token(subject: str, expires_delta: timedelta | None = None) -> str:
+    if expires_delta is None:
+        expires_delta = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    return _create_token(subject, "refresh", expires_delta)
+
+
+def create_reset_token(subject: str, expires_delta: timedelta | None = None) -> str:
+    if expires_delta is None:
+        expires_delta = timedelta(minutes=settings.RESET_TOKEN_EXPIRE_MINUTES)
+    return _create_token(subject, "reset", expires_delta)
 
 
 def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)):
@@ -46,6 +67,9 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
     )
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        token_type = payload.get("type")
+        if token_type and token_type != "access":
+            raise credentials_exception
         user_id = payload.get("sub")
         if user_id is None:
             raise credentials_exception
@@ -55,6 +79,14 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
     if user is None:
         raise credentials_exception
     return user
+
+
+def decode_token(token: str):
+    return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+
+
+def hash_token(token: str) -> str:
+    return _hash_token(token)
 
 
 def require_roles(*roles: Iterable[str]):

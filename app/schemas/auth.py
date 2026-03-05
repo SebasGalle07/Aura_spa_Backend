@@ -13,5 +13,24 @@ class LoginRequest(BaseSchema):
 class Token(BaseSchema):
     model_config = ConfigDict(populate_by_name=True)
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     user: UserOut
+
+
+class RefreshRequest(BaseSchema):
+    refresh_token: str
+
+
+class ForgotPasswordRequest(BaseSchema):
+    email: EmailStr
+
+
+class ForgotPasswordResponse(BaseSchema):
+    ok: bool = True
+    reset_token: str | None = None
+
+
+class ResetPasswordRequest(BaseSchema):
+    token: str
+    new_password: str

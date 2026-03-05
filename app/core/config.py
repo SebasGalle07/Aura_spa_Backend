@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "CHANGE_ME"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    RESET_TOKEN_EXPIRE_MINUTES: int = 30
+    RETURN_RESET_TOKEN: bool = True
 
     DATABASE_URL: str = "postgresql+psycopg://postgres:CHANGE_ME@localhost:5432/aura_spa"
 
