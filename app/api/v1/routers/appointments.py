@@ -1,5 +1,6 @@
-﻿from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.core.security import require_roles, get_current_user
 from app.db.deps import get_db
@@ -71,7 +72,11 @@ def create_one(payload: AppointmentCreate, db: Session = Depends(get_db), curren
         "notes": payload.notes or "",
         "history": [],
     }
-    apt = create_appointment(db, data)
+    try:
+        apt = create_appointment(db, data)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Slot not available")
     add_history(apt, "Creada por cliente" if current_user.role == "client" else "Creada por admin")
     db.commit()
     db.refresh(apt)
@@ -84,8 +89,20 @@ def my_appointments(db: Session = Depends(get_db), current_user=Depends(get_curr
 
 
 @router.get("", response_model=list[AppointmentOut], dependencies=[Depends(require_roles("admin"))])
-def list_all(db: Session = Depends(get_db)):
-    return list_appointments(db)
+def list_all(
+    date: str | None = None,
+    status: str | None = None,
+    service_id: int | None = None,
+    professional_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    return list_appointments(
+        db,
+        date=date,
+        status=status,
+        service_id=service_id,
+        professional_id=professional_id,
+    )
 
 
 @router.get("/{appointment_id}", response_model=AppointmentOut)
@@ -154,7 +171,11 @@ def reschedule(appointment_id: int, payload: AppointmentReschedule, db: Session 
     if not svc:
         raise HTTPException(status_code=404, detail="Service not found")
     _ensure_available(db, apt.professional_id, payload.date, payload.time, svc.duration, appointment_id=apt.id)
-    apt = update_appointment(db, apt, {"date": payload.date, "time": payload.time, "status": "rescheduled"})
+    try:
+        apt = update_appointment(db, apt, {"date": payload.date, "time": payload.time, "status": "rescheduled"})
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Slot not available")
     add_history(apt, f"Reprogramada a {payload.date} {payload.time}")
     db.commit()
     db.refresh(apt)

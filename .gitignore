@@ -54,3 +54,6 @@ Desktop.ini
 
 # Node (if frontend is added later)
 node_modules/
+
+# Media uploads
+media/

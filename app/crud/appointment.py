@@ -6,8 +6,26 @@ from app.models.appointment import Appointment
 from app.models.service import Service
 
 
-def list_appointments(db: Session):
-    return list(db.scalars(select(Appointment)).all())
+def list_appointments(
+    db: Session,
+    date: str | None = None,
+    status: str | None = None,
+    service_id: int | None = None,
+    professional_id: int | None = None,
+    client_email: str | None = None,
+):
+    stmt = select(Appointment)
+    if date:
+        stmt = stmt.where(Appointment.date == date)
+    if status:
+        stmt = stmt.where(Appointment.status == status)
+    if service_id:
+        stmt = stmt.where(Appointment.service_id == service_id)
+    if professional_id:
+        stmt = stmt.where(Appointment.professional_id == professional_id)
+    if client_email:
+        stmt = stmt.where(Appointment.client_email == client_email)
+    return list(db.scalars(stmt).all())
 
 
 def list_appointments_by_client(db: Session, email: str):

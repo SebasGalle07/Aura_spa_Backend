@@ -20,6 +20,9 @@ class Settings(BaseSettings):
 
     BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:5173"]
 
+    MEDIA_ROOT: str = "media"
+    MEDIA_URL: str = "/media"
+
     SEED_ON_STARTUP: bool = True
     AUTO_CREATE_TABLES: bool = False
 

@@ -1,5 +1,8 @@
-﻿from fastapi import FastAPI
+from pathlib import Path
+
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.api import api_router
 from app.core.config import settings
@@ -8,6 +11,8 @@ from app.db.base import Base
 import app.models  # noqa: F401
 from app.seeds.seed_data import seed_data_if_needed
 
+media_root = Path(settings.MEDIA_ROOT)
+media_root.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title=settings.PROJECT_NAME, openapi_url=f"{settings.API_V1_STR}/openapi.json")
 
@@ -20,9 +25,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.mount(settings.MEDIA_URL, StaticFiles(directory=str(media_root)), name="media")
+
 
 @app.on_event("startup")
 def on_startup():
+    (media_root / "services").mkdir(parents=True, exist_ok=True)
     if settings.AUTO_CREATE_TABLES:
         Base.metadata.create_all(bind=engine)
     if settings.SEED_ON_STARTUP:

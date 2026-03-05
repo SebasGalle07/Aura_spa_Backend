@@ -20,6 +20,8 @@ pip install -r requirements.txt
 - `SECRET_KEY` (default: `CHANGE_ME`)
 - `ACCESS_TOKEN_EXPIRE_MINUTES` (default: `1440`)
 - `BACKEND_CORS_ORIGINS` (default: `http://localhost:5173`)
+- `MEDIA_ROOT` (default: `media`)
+- `MEDIA_URL` (default: `/media`)
 - `SEED_ON_STARTUP` (default: `true`)
 - `AUTO_CREATE_TABLES` (default: `false`)
 
@@ -51,6 +53,7 @@ uvicorn app.main:app --reload
 ## Notas
 - El seeder es idempotente y toma los mismos datos iniciales que el frontend (servicios, profesionales, citas y usuarios).
 - CORS esta habilitado para `http://localhost:5173`. Cambialo con `BACKEND_CORS_ORIGINS`.
+- Las imagenes de servicios se guardan en `MEDIA_ROOT` y se sirven en `MEDIA_URL` (por defecto `/media/services/...`).
 
 ## Endpoints principales
 Base URL: `http://localhost:8000/api/v1`
@@ -66,6 +69,8 @@ Base URL: `http://localhost:8000/api/v1`
 - `POST /services` (admin)
 - `PUT /services/{id}` (admin)
 - `DELETE /services/{id}` (admin)
+- `POST /services/{id}/image` (admin, multipart file)
+- `DELETE /services/{id}/image` (admin)
 
 **Professionals**
 - `GET /professionals`
