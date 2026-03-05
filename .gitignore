@@ -57,3 +57,6 @@ node_modules/
 
 # Media uploads
 media/
+
+# Temp extracts
+_pdf_extract.txt
