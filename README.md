@@ -20,6 +20,15 @@ pip install -r requirements.txt
 - `SECRET_KEY` (default: `CHANGE_ME`)
 - `ACCESS_TOKEN_EXPIRE_MINUTES` (default: `10`)
 - `BACKEND_CORS_ORIGINS` (default: `http://localhost:4200`)
+- `FRONTEND_APP_URL` (default: `http://localhost:4200`)
+- `SMTP_ENABLED` (default: `false`)
+- `SMTP_HOST`
+- `SMTP_PORT` (default: `587`)
+- `SMTP_USE_TLS` (default: `true`)
+- `SMTP_USERNAME`
+- `SMTP_PASSWORD`
+- `SMTP_FROM_EMAIL` (default: `no-reply@auraspa.com`)
+- `CONTACT_TO_EMAIL` (default: `info@auraspa.com`)
 - `MEDIA_ROOT` (default: `media`)
 - `MEDIA_URL` (default: `/media`)
 - `SEED_ON_STARTUP` (default: `true`)
@@ -48,10 +57,10 @@ uvicorn app.main:app --reload
 ## Credenciales demo (seed)
 - Admin: `admin@auraspa.com` / `admin123`
 - Cliente: `cliente@email.com` / `cliente123`
-- Profesional: `valentina@auraspa.com` / `val123`
+- Profesional: `valentina@auraspa.com` / `valentina123`
 
 ## Notas
-- El seeder es idempotente y toma los mismos datos iniciales que el frontend (servicios, profesionales, citas y usuarios).
+- El seeder es idempotente y toma los mismos datos iniciales que el frontend (servicios, profesionales y usuarios).
 - CORS esta habilitado para `http://localhost:4200`. Cambialo con `BACKEND_CORS_ORIGINS`.
 - Las imagenes de servicios se guardan en `MEDIA_ROOT` y se sirven en `MEDIA_URL` (por defecto `/media/services/...`).
 
@@ -103,6 +112,7 @@ Base URL: `http://localhost:8000/api/v1`
 **Public**
 - `GET /company`
 - `GET /branding`
+- `POST /contact`
 
 **Users**
 - `GET /users` (admin)

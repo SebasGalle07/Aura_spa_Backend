@@ -26,6 +26,17 @@ class Settings(BaseSettings):
     MEDIA_ROOT: str = "media"
     MEDIA_URL: str = "/media"
 
+    FRONTEND_APP_URL: str = "http://localhost:4200"
+
+    SMTP_ENABLED: bool = False
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USE_TLS: bool = True
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "no-reply@auraspa.com"
+    CONTACT_TO_EMAIL: str = "info@auraspa.com"
+
     SEED_ON_STARTUP: bool = True
     AUTO_CREATE_TABLES: bool = False
 

@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -6,6 +6,7 @@ from jose import JWTError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.mailer import send_password_reset_email
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -142,6 +143,12 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
     reset_expiry = _expiry_datetime_from_token(reset_token)
     store_reset_token(db, user.id, hash_token(reset_token), reset_expiry)
     logger.info("Token de reset generado para user_id=%s", user.id)
+
+    if settings.SMTP_ENABLED:
+        reset_link = f"{settings.FRONTEND_APP_URL.rstrip('/')}/forgot-password?token={reset_token}"
+        sent = send_password_reset_email(user.email, user.name, reset_link)
+        if not sent:
+            logger.error("No fue posible enviar correo de recuperacion a %s", user.email)
 
     if settings.RETURN_RESET_TOKEN:
         return ForgotPasswordResponse(ok=True, reset_token=reset_token)
