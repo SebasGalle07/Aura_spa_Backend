@@ -5,25 +5,18 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from jose import JWTError
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
-from app.core.mailer import send_password_reset_email
 from app.core.security import (
     create_access_token,
     create_refresh_token,
-    create_reset_token,
     decode_token,
     get_current_user,
-    get_password_hash,
     hash_token,
     validate_password_length,
 )
 from app.crud.token import (
     get_refresh_token,
-    get_reset_token,
-    mark_reset_used,
     revoke_refresh_token,
     store_refresh_token,
-    store_reset_token,
 )
 from app.crud.user import authenticate_user, create_user, get_user_by_email, get_user_by_id
 from app.db.deps import get_db
@@ -133,66 +126,15 @@ def logout(payload: RefreshRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)
-def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    user = get_user_by_email(db, payload.email)
-    if not user:
-        logger.info("Solicitud reset para email no registrado")
-        return ForgotPasswordResponse(ok=True, reset_token=None)
-
-    reset_token = create_reset_token(subject=str(user.id))
-    reset_expiry = _expiry_datetime_from_token(reset_token)
-    store_reset_token(db, user.id, hash_token(reset_token), reset_expiry)
-    logger.info("Token de reset generado para user_id=%s", user.id)
-
-    if settings.SMTP_ENABLED:
-        reset_link = f"{settings.FRONTEND_APP_URL.rstrip('/')}/forgot-password?token={reset_token}"
-        sent = send_password_reset_email(user.email, user.name, reset_link)
-        if not sent:
-            logger.error("No fue posible enviar correo de recuperacion a %s", user.email)
-
-    if settings.RETURN_RESET_TOKEN:
-        return ForgotPasswordResponse(ok=True, reset_token=reset_token)
-    return ForgotPasswordResponse(ok=True, reset_token=None)
+def forgot_password(payload: ForgotPasswordRequest):
+    logger.info("Recuperacion de password no disponible. email=%s", payload.email)
+    raise HTTPException(status_code=501, detail="Recuperacion de contrasena no disponible")
 
 
 @router.post("/reset-password")
-def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
-    validate_password_length(payload.new_password)
-
-    token_hash = hash_token(payload.token)
-    stored_token = get_reset_token(db, token_hash)
-    if not stored_token or stored_token.used:
-        logger.warning("Reset rechazado: token invalido o usado")
-        raise HTTPException(status_code=400, detail="Invalid or used reset token")
-    if stored_token.expires_at <= datetime.utcnow():
-        logger.warning("Reset rechazado: token expirado")
-        raise HTTPException(status_code=400, detail="Reset token expired")
-
-    try:
-        token_payload = decode_token(payload.token)
-    except JWTError:
-        raise HTTPException(status_code=400, detail="Invalid reset token")
-
-    if token_payload.get("type") != "reset":
-        logger.warning("Reset rechazado: tipo de token invalido")
-        raise HTTPException(status_code=400, detail="Invalid reset token")
-
-    user_id = token_payload.get("sub")
-    if user_id is None or int(user_id) != stored_token.user_id:
-        logger.warning("Reset rechazado: usuario no coincide con token")
-        raise HTTPException(status_code=400, detail="Invalid reset token")
-
-    user = get_user_by_id(db, int(user_id))
-    if not user:
-        logger.warning("Reset rechazado: usuario no encontrado")
-        raise HTTPException(status_code=404, detail="User not found")
-
-    user.hashed_password = get_password_hash(payload.new_password)
-    db.add(user)
-    db.commit()
-    mark_reset_used(db, stored_token)
-    logger.info("Password actualizada para user_id=%s", user.id)
-    return {"ok": True}
+def reset_password(payload: ResetPasswordRequest):
+    logger.info("Reset de password no disponible")
+    raise HTTPException(status_code=501, detail="Recuperacion de contrasena no disponible")
 
 
 @router.get("/me", response_model=UserOut)

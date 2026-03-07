@@ -21,14 +21,6 @@ pip install -r requirements.txt
 - `ACCESS_TOKEN_EXPIRE_MINUTES` (default: `10`)
 - `BACKEND_CORS_ORIGINS` (default: `http://localhost:4200`)
 - `FRONTEND_APP_URL` (default: `http://localhost:4200`)
-- `SMTP_ENABLED` (default: `false`)
-- `SMTP_HOST`
-- `SMTP_PORT` (default: `587`)
-- `SMTP_USE_TLS` (default: `true`)
-- `SMTP_USERNAME`
-- `SMTP_PASSWORD`
-- `SMTP_FROM_EMAIL` (default: `no-reply@auraspa.com`)
-- `CONTACT_TO_EMAIL` (default: `info@auraspa.com`)
 - `MEDIA_ROOT` (default: `media`)
 - `MEDIA_URL` (default: `/media`)
 - `SEED_ON_STARTUP` (default: `true`)
@@ -61,7 +53,7 @@ uvicorn app.main:app --reload
 
 ## Notas
 - El seeder es idempotente y toma los mismos datos iniciales que el frontend (servicios, profesionales y usuarios).
-- CORS esta habilitado para `http://localhost:4200`. Cambialo con `BACKEND_CORS_ORIGINS`.
+- CORS acepta `BACKEND_CORS_ORIGINS` y adicionalmente agrega `FRONTEND_APP_URL` automaticamente.
 - Las imagenes de servicios se guardan en `MEDIA_ROOT` y se sirven en `MEDIA_URL` (por defecto `/media/services/...`).
 
 ## Endpoints principales
@@ -72,8 +64,8 @@ Base URL: `http://localhost:8000/api/v1`
 - `POST /auth/login`
 - `POST /auth/refresh`
 - `POST /auth/logout`
-- `POST /auth/forgot-password`
-- `POST /auth/reset-password`
+- `POST /auth/forgot-password` (deshabilitado, responde 501)
+- `POST /auth/reset-password` (deshabilitado, responde 501)
 - `GET /auth/me`
 
 **Services**
@@ -112,7 +104,7 @@ Base URL: `http://localhost:8000/api/v1`
 **Public**
 - `GET /company`
 - `GET /branding`
-- `POST /contact`
+- `POST /contact` (recibe y confirma; no envia correo)
 
 **Users**
 - `GET /users` (admin)

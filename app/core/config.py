@@ -1,54 +1,72 @@
-﻿from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator
+﻿from urllib.parse import urlsplit
+
+from pydantic import field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file='.env',
         env_ignore_empty=True,
-        extra="ignore",
+        extra='ignore',
     )
 
-    PROJECT_NAME: str = "Aura Spa Backend"
-    API_V1_STR: str = "/api/v1"
+    PROJECT_NAME: str = 'Aura Spa Backend'
+    API_V1_STR: str = '/api/v1'
 
-    SECRET_KEY: str = "CHANGE_ME"
-    ALGORITHM: str = "HS256"
+    SECRET_KEY: str = 'CHANGE_ME'
+    ALGORITHM: str = 'HS256'
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     RESET_TOKEN_EXPIRE_MINUTES: int = 30
-    RETURN_RESET_TOKEN: bool = True
+    RETURN_RESET_TOKEN: bool = False
 
-    DATABASE_URL: str = "postgresql+psycopg://postgres:CHANGE_ME@localhost:5432/aura_spa"
+    DATABASE_URL: str = 'postgresql+psycopg://postgres:CHANGE_ME@localhost:5432/aura_spa'
 
-    BACKEND_CORS_ORIGINS: str | list[str] = "http://localhost:4200"
+    BACKEND_CORS_ORIGINS: str | list[str] = 'http://localhost:4200'
+    FRONTEND_APP_URL: str = 'http://localhost:4200'
 
-    MEDIA_ROOT: str = "media"
-    MEDIA_URL: str = "/media"
-
-    FRONTEND_APP_URL: str = "http://localhost:4200"
-
-    SMTP_ENABLED: bool = False
-    SMTP_HOST: str = ""
-    SMTP_PORT: int = 587
-    SMTP_USE_TLS: bool = True
-    SMTP_USERNAME: str = ""
-    SMTP_PASSWORD: str = ""
-    SMTP_FROM_EMAIL: str = "no-reply@auraspa.com"
-    CONTACT_TO_EMAIL: str = "info@auraspa.com"
+    MEDIA_ROOT: str = 'media'
+    MEDIA_URL: str = '/media'
 
     SEED_ON_STARTUP: bool = True
     AUTO_CREATE_TABLES: bool = False
 
-    @field_validator("BACKEND_CORS_ORIGINS", mode="before")
+    @field_validator('BACKEND_CORS_ORIGINS', mode='before')
     @classmethod
     def _assemble_cors(cls, v):
         if v is None:
             return []
         if isinstance(v, str):
-            # Allow a plain comma-separated string in env vars on Cloud Run.
-            return [i.strip() for i in v.split(",") if i.strip()]
+            return [i.strip() for i in v.split(',') if i.strip()]
         return v
+
+    @model_validator(mode='after')
+    def _finalize_settings(self):
+        origins = self.BACKEND_CORS_ORIGINS if isinstance(self.BACKEND_CORS_ORIGINS, list) else []
+        frontend_origin = self._normalize_origin(self.FRONTEND_APP_URL)
+        if frontend_origin:
+            origins.append(frontend_origin)
+
+        seen = set()
+        cleaned: list[str] = []
+        for origin in origins:
+            candidate = self._normalize_origin(origin)
+            if candidate and candidate not in seen:
+                seen.add(candidate)
+                cleaned.append(candidate)
+        self.BACKEND_CORS_ORIGINS = cleaned
+        return self
+
+    @staticmethod
+    def _normalize_origin(url_or_origin: str) -> str:
+        value = (url_or_origin or '').strip().rstrip('/')
+        if not value:
+            return ''
+        parsed = urlsplit(value)
+        if parsed.scheme and parsed.netloc:
+            return f'{parsed.scheme}://{parsed.netloc}'
+        return value
 
 
 settings = Settings()
