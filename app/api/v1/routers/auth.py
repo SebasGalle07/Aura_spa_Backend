@@ -140,6 +140,10 @@ def logout(payload: RefreshRequest, db: Session = Depends(get_db)):
 
 @router.post('/forgot-password', response_model=ForgotPasswordResponse)
 def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    if not settings.smtp_enabled and not settings.RETURN_RESET_TOKEN:
+        logger.error('Recuperacion no disponible: SMTP no configurado y RETURN_RESET_TOKEN=False')
+        raise HTTPException(status_code=503, detail='Recuperacion por correo no disponible')
+
     user = get_user_by_email(db, payload.email)
     reset_token: str | None = None
 
