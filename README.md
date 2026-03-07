@@ -21,6 +21,14 @@ pip install -r requirements.txt
 - `ACCESS_TOKEN_EXPIRE_MINUTES` (default: `10`)
 - `BACKEND_CORS_ORIGINS` (default: `http://localhost:4200`)
 - `FRONTEND_APP_URL` (default: `http://localhost:4200`)
+- `SMTP_HOST` (ej: `smtp.gmail.com`)
+- `SMTP_PORT` (default: `587`)
+- `SMTP_USERNAME`
+- `SMTP_PASSWORD`
+- `SMTP_FROM_EMAIL`
+- `SMTP_FROM_NAME` (default: `Aura Spa`)
+- `SMTP_USE_TLS` (default: `true`)
+- `RETURN_RESET_TOKEN` (default: `false`, util solo en pruebas locales)
 - `MEDIA_ROOT` (default: `media`)
 - `MEDIA_URL` (default: `/media`)
 - `SEED_ON_STARTUP` (default: `true`)
@@ -64,8 +72,8 @@ Base URL: `http://localhost:8000/api/v1`
 - `POST /auth/login`
 - `POST /auth/refresh`
 - `POST /auth/logout`
-- `POST /auth/forgot-password` (deshabilitado, responde 501)
-- `POST /auth/reset-password` (deshabilitado, responde 501)
+- `POST /auth/forgot-password` (envia correo si SMTP esta configurado)
+- `POST /auth/reset-password`
 - `GET /auth/me`
 
 **Services**

@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: str | list[str] = 'http://localhost:4200'
     FRONTEND_APP_URL: str = 'http://localhost:4200'
 
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SMTP_FROM_EMAIL: str | None = None
+    SMTP_FROM_NAME: str = 'Aura Spa'
+    SMTP_USE_TLS: bool = True
+
     MEDIA_ROOT: str = 'media'
     MEDIA_URL: str = '/media'
 
@@ -67,6 +75,10 @@ class Settings(BaseSettings):
         if parsed.scheme and parsed.netloc:
             return f'{parsed.scheme}://{parsed.netloc}'
         return value
+
+    @property
+    def smtp_enabled(self) -> bool:
+        return bool(self.SMTP_HOST and self.SMTP_USERNAME and self.SMTP_PASSWORD and self.SMTP_FROM_EMAIL)
 
 
 settings = Settings()
