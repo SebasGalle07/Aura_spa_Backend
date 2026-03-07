@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
+from app.core.specialty_match import is_professional_compatible_with_service
 from app.core.security import require_roles, get_current_user
 from app.db.deps import get_db
 from app.crud.service import get_service
@@ -53,6 +54,8 @@ def create_one(payload: AppointmentCreate, db: Session = Depends(get_db), curren
     pro = get_professional(db, payload.professional_id)
     if not svc or not pro:
         raise HTTPException(status_code=404, detail="Service or professional not found")
+    if not is_professional_compatible_with_service(svc.category, pro.specialty):
+        raise HTTPException(status_code=422, detail="El profesional seleccionado no presta este servicio")
 
     _ensure_available(db, payload.professional_id, payload.date, payload.time, svc.duration)
 

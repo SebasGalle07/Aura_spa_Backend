@@ -10,3 +10,7 @@ class AdminSummary(BaseSchema):
     cancelled: int
     rescheduled: int
     agenda: list[AppointmentOut]
+
+
+class UploadImageResponse(BaseSchema):
+    url: str

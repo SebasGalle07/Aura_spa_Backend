@@ -36,6 +36,8 @@ class Settings(BaseSettings):
 
     MEDIA_ROOT: str = 'media'
     MEDIA_URL: str = '/media'
+    STORAGE_BUCKET: str | None = None
+    STORAGE_PREFIX: str = 'branding'
 
     SEED_ON_STARTUP: bool = True
     AUTO_CREATE_TABLES: bool = False

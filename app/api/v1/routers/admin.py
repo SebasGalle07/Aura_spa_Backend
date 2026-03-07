@@ -1,14 +1,15 @@
 ﻿from datetime import date as dt_date
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 
+from app.core.image_storage import save_branding_image
 from app.core.security import require_roles
 from app.db.deps import get_db
 from app.crud.appointment import list_appointments
 from app.crud.company import get_or_create_company, update_company, update_branding
 from app.schemas.company import CompanyData, CompanyUpdate, Branding, BrandingUpdate
-from app.schemas.admin import AdminSummary
+from app.schemas.admin import AdminSummary, UploadImageResponse
 
 router = APIRouter()
 
@@ -66,3 +67,12 @@ def put_branding(payload: BrandingUpdate, db: Session = Depends(get_db)):
             "section3": company.landing_section3,
         },
     }
+
+
+@router.post(
+    "/branding/upload",
+    response_model=UploadImageResponse,
+    dependencies=[Depends(require_roles("admin"))],
+)
+def upload_branding(file: UploadFile = File(...)):
+    return {"url": save_branding_image(file)}

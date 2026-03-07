@@ -1,6 +1,7 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.specialty_match import is_professional_compatible_with_service
 from app.db.deps import get_db
 from app.crud.service import get_service
 from app.crud.professional import get_professional
@@ -34,6 +35,9 @@ def availability(service_id: int, professional_id: int, date: str, db: Session =
     pro = get_professional(db, professional_id)
     if not svc or not pro:
         raise HTTPException(status_code=404, detail="Service or professional not found")
+    if not is_professional_compatible_with_service(svc.category, pro.specialty):
+        return []
+
     all_slots = gen_slots(pro.schedule_start, pro.schedule_end, svc.duration)
     apts = list_appointments_by_professional_and_date_with_duration(db, professional_id, date)
     available = []
