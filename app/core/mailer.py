@@ -1,4 +1,4 @@
-﻿import smtplib
+import smtplib
 from email.message import EmailMessage
 
 from app.core.config import settings
@@ -41,5 +41,24 @@ def send_password_reset_email(to_email: str, reset_link: str) -> None:
     <p><a href=\"{reset_link}\">Restablecer contrasena</a></p>
     <p>Este enlace expira en {settings.RESET_TOKEN_EXPIRE_MINUTES} minutos.</p>
     <p>Si no realizaste esta solicitud, ignora este mensaje.</p>
+    """
+    send_email(to_email, subject, text, html)
+
+
+def send_contact_notification(to_email: str, sender_name: str, sender_email: str, message: str) -> None:
+    subject = 'Aura Spa - Nuevo mensaje de contacto'
+    text = (
+        'Se recibio un nuevo mensaje desde el formulario de contacto.\n\n'
+        f'Nombre: {sender_name}\n'
+        f'Correo: {sender_email}\n\n'
+        'Mensaje:\n'
+        f'{message}\n'
+    )
+    html = f"""
+    <p>Se recibio un nuevo mensaje desde el formulario de contacto.</p>
+    <p><strong>Nombre:</strong> {sender_name}</p>
+    <p><strong>Correo:</strong> {sender_email}</p>
+    <p><strong>Mensaje:</strong></p>
+    <p>{message.replace('\n', '<br/>')}</p>
     """
     send_email(to_email, subject, text, html)
