@@ -1,8 +1,11 @@
-﻿from datetime import datetime
+from datetime import datetime
 import logging
+import secrets
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from google.auth.transport.requests import Request as GoogleRequest
+from google.oauth2 import id_token as google_id_token
 from jose import JWTError
 from sqlalchemy.orm import Session
 
@@ -31,6 +34,7 @@ from app.db.deps import get_db
 from app.schemas.auth import (
     ForgotPasswordRequest,
     ForgotPasswordResponse,
+    GoogleLoginRequest,
     LoginRequest,
     RefreshRequest,
     ResetPasswordRequest,
@@ -68,6 +72,34 @@ def _build_reset_link(token: str) -> str:
     return f'{base}/forgot-password?token={quote(token)}'
 
 
+def _verify_google_id_token(id_token: str) -> dict:
+    if not settings.google_login_enabled:
+        logger.warning('Login con Google no disponible: GOOGLE_CLIENT_IDS vacio')
+        raise HTTPException(status_code=503, detail='Login con Google no disponible')
+
+    try:
+        token_data = google_id_token.verify_oauth2_token(id_token, GoogleRequest())
+    except ValueError:
+        logger.warning('Google login rechazado: token invalido')
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Token de Google invalido')
+
+    issuer = token_data.get('iss')
+    if issuer not in ('accounts.google.com', 'https://accounts.google.com'):
+        logger.warning('Google login rechazado: issuer invalido=%s', issuer)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Token de Google invalido')
+
+    audience = token_data.get('aud')
+    if audience not in settings.GOOGLE_CLIENT_IDS:
+        logger.warning('Google login rechazado: audience invalido=%s', audience)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Token de Google invalido')
+
+    if token_data.get('email_verified') is not True:
+        logger.warning('Google login rechazado: email sin verificar')
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='El correo de Google no esta verificado')
+
+    return token_data
+
+
 @router.post('/register', response_model=Token)
 def register(user_in: UserRegister, db: Session = Depends(get_db)):
     validate_password_length(user_in.password)
@@ -87,6 +119,33 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
         logger.warning('Login fallido para email=%s', data.email)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Incorrect email or password')
     logger.info('Login exitoso: id=%s email=%s', user.id, user.email)
+    return _issue_session_tokens(db, user)
+
+
+
+
+@router.post('/google', response_model=Token)
+def login_google(payload: GoogleLoginRequest, db: Session = Depends(get_db)):
+    token_data = _verify_google_id_token(payload.id_token)
+    email = (token_data.get('email') or '').strip().lower()
+    if not email:
+        logger.warning('Google login rechazado: token sin email')
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Token de Google invalido')
+
+    user = get_user_by_email(db, email)
+    if not user:
+        default_name = email.split('@', 1)[0]
+        name = (token_data.get('name') or token_data.get('given_name') or default_name).strip() or default_name
+        google_user = UserRegister(
+            email=email,
+            password=secrets.token_urlsafe(32),
+            name=name,
+            phone=None,
+        )
+        user = create_user(db, google_user, role='client')
+        logger.info('Usuario creado por login Google: id=%s email=%s', user.id, user.email)
+
+    logger.info('Login Google exitoso: id=%s email=%s', user.id, user.email)
     return _issue_session_tokens(db, user)
 
 

@@ -1,7 +1,11 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
+from app.core.config import settings
+from app.core.mailer import send_appointment_confirmation_email
 from app.core.specialty_match import is_professional_compatible_with_service
 from app.core.security import require_roles, get_current_user
 from app.db.deps import get_db
@@ -19,6 +23,7 @@ from app.crud.appointment import (
 from app.schemas.appointment import AppointmentOut, AppointmentCreate, AppointmentReschedule, AppointmentNotes
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _to_minutes(time_str: str) -> int:
@@ -83,6 +88,26 @@ def create_one(payload: AppointmentCreate, db: Session = Depends(get_db), curren
     add_history(apt, "Creada por cliente" if current_user.role == "client" else "Creada por admin")
     db.commit()
     db.refresh(apt)
+
+    if settings.smtp_enabled and apt.client_email:
+        try:
+            send_appointment_confirmation_email(
+                to_email=apt.client_email,
+                client_name=apt.client_name,
+                service_name=svc.name,
+                professional_name=pro.name,
+                date=apt.date,
+                time=apt.time,
+                notes=apt.notes,
+            )
+        except Exception as exc:
+            logger.exception(
+                'No se pudo enviar correo de confirmacion de cita id=%s email=%s: %s',
+                apt.id,
+                apt.client_email,
+                exc,
+            )
+
     return apt
 
 

@@ -1,4 +1,17 @@
-﻿from app.schemas.common import BaseSchema
+from pydantic import field_validator
+
+from app.schemas.common import BaseSchema
+
+
+def _validate_digits_phone(value: str | None) -> str | None:
+    if value is None:
+        return None
+    clean = value.strip()
+    if not clean:
+        return None
+    if not clean.isdigit():
+        raise ValueError("El telefono solo permite numeros.")
+    return clean
 
 
 class CompanyData(BaseSchema):
@@ -27,7 +40,10 @@ class CompanyData(BaseSchema):
 
 
 class CompanyUpdate(CompanyData):
-    pass
+    @field_validator("phone", "whatsapp")
+    @classmethod
+    def validate_phone_fields(cls, value: str | None) -> str | None:
+        return _validate_digits_phone(value)
 
 
 class LandingImages(BaseSchema):

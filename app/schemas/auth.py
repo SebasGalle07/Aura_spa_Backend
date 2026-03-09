@@ -10,6 +10,11 @@ class LoginRequest(BaseSchema):
     password: str
 
 
+class GoogleLoginRequest(BaseSchema):
+    model_config = ConfigDict(populate_by_name=True)
+    id_token: str
+
+
 class Token(BaseSchema):
     model_config = ConfigDict(populate_by_name=True)
     access_token: str

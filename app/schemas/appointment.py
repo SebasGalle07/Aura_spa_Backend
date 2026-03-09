@@ -1,9 +1,20 @@
-﻿from typing import Literal
-from pydantic import EmailStr, Field
+from typing import Literal
+from pydantic import EmailStr, Field, field_validator
 
 from app.schemas.common import BaseSchema
 
 Status = Literal["confirmed", "cancelled", "attended", "rescheduled"]
+
+
+def _validate_digits_phone(value: str | None) -> str | None:
+    if value is None:
+        return None
+    clean = value.strip()
+    if not clean:
+        return None
+    if not clean.isdigit():
+        raise ValueError("El telefono solo permite numeros.")
+    return clean
 
 
 class AppointmentHistoryItem(BaseSchema):
@@ -20,6 +31,11 @@ class AppointmentCreate(BaseSchema):
     client_email: EmailStr | None = None
     client_phone: str | None = None
     notes: str | None = ""
+
+    @field_validator("client_phone")
+    @classmethod
+    def validate_client_phone(cls, value: str | None) -> str | None:
+        return _validate_digits_phone(value)
 
 
 class AppointmentOut(BaseSchema):

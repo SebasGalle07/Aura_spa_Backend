@@ -62,3 +62,42 @@ def send_contact_notification(to_email: str, sender_name: str, sender_email: str
     <p>{message.replace('\n', '<br/>')}</p>
     """
     send_email(to_email, subject, text, html)
+
+
+def send_appointment_confirmation_email(
+    to_email: str,
+    client_name: str,
+    service_name: str,
+    professional_name: str,
+    date: str,
+    time: str,
+    notes: str | None = None,
+) -> None:
+    subject = 'Aura Spa - Confirmacion de cita'
+    notes_text = notes.strip() if notes else ''
+    text = (
+        f'Hola {client_name},\n\n'
+        'Tu cita fue confirmada con exito.\n\n'
+        f'Servicio: {service_name}\n'
+        f'Profesional: {professional_name}\n'
+        f'Fecha: {date}\n'
+        f'Hora: {time}\n'
+    )
+    if notes_text:
+        text += f'Observaciones: {notes_text}\n'
+    text += '\nTe esperamos en Aura Spa.'
+
+    html = f"""
+    <p>Hola {client_name},</p>
+    <p>Tu cita fue confirmada con exito.</p>
+    <ul>
+      <li><strong>Servicio:</strong> {service_name}</li>
+      <li><strong>Profesional:</strong> {professional_name}</li>
+      <li><strong>Fecha:</strong> {date}</li>
+      <li><strong>Hora:</strong> {time}</li>
+    </ul>
+    """
+    if notes_text:
+        html += f"<p><strong>Observaciones:</strong> {notes_text}</p>"
+    html += '<p>Te esperamos en Aura Spa.</p>'
+    send_email(to_email, subject, text, html)

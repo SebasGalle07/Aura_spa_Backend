@@ -1,9 +1,20 @@
-﻿from typing import Literal
-from pydantic import EmailStr
+from typing import Literal
+from pydantic import EmailStr, field_validator
 
 from app.schemas.common import BaseSchema
 
 Role = Literal["admin", "client", "professional"]
+
+
+def _validate_digits_phone(value: str | None) -> str | None:
+    if value is None:
+        return None
+    clean = value.strip()
+    if not clean:
+        return None
+    if not clean.isdigit():
+        raise ValueError("El telefono solo permite numeros.")
+    return clean
 
 
 class UserBase(BaseSchema):
@@ -21,12 +32,22 @@ class UserCreate(BaseSchema):
     phone: str | None = None
     role: Role = "client"
 
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value: str | None) -> str | None:
+        return _validate_digits_phone(value)
+
 
 class UserRegister(BaseSchema):
     email: EmailStr
     password: str
     name: str
     phone: str | None = None
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value: str | None) -> str | None:
+        return _validate_digits_phone(value)
 
 
 class UserUpdate(BaseSchema):
@@ -35,6 +56,11 @@ class UserUpdate(BaseSchema):
     phone: str | None = None
     role: Role | None = None
     password: str | None = None
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value: str | None) -> str | None:
+        return _validate_digits_phone(value)
 
 
 class UserOut(BaseSchema):

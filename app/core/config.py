@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str | None = None
     SMTP_FROM_NAME: str = 'Aura Spa'
     SMTP_USE_TLS: bool = True
+    GOOGLE_CLIENT_IDS: str | list[str] = ''
 
     MEDIA_ROOT: str = 'media'
     MEDIA_URL: str = '/media'
@@ -66,7 +67,14 @@ class Settings(BaseSettings):
                 seen.add(candidate)
                 cleaned.append(candidate)
         self.BACKEND_CORS_ORIGINS = cleaned
+        self.GOOGLE_CLIENT_IDS = self._normalize_csv(self.GOOGLE_CLIENT_IDS)
         return self
+
+    @staticmethod
+    def _normalize_csv(value: str | list[str]) -> list[str]:
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(',') if item.strip()]
+        return [item.strip() for item in value if item and item.strip()]
 
     @staticmethod
     def _normalize_origin(url_or_origin: str) -> str:
@@ -81,6 +89,10 @@ class Settings(BaseSettings):
     @property
     def smtp_enabled(self) -> bool:
         return bool(self.SMTP_HOST and self.SMTP_USERNAME and self.SMTP_PASSWORD and self.SMTP_FROM_EMAIL)
+
+    @property
+    def google_login_enabled(self) -> bool:
+        return bool(self.GOOGLE_CLIENT_IDS)
 
 
 settings = Settings()
