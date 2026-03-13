@@ -28,6 +28,23 @@ def send_email(to_email: str, subject: str, text_body: str, html_body: str | Non
         server.send_message(msg)
 
 
+def send_email_verification_email(to_email: str, verification_link: str) -> None:
+    subject = 'Aura Spa - Verifica tu correo'
+    text = (
+        'Gracias por crear tu cuenta en Aura Spa.\n\n'
+        f'Para activar tu cuenta, ingresa a este enlace:\n{verification_link}\n\n'
+        f'Este enlace expira en {settings.VERIFY_EMAIL_TOKEN_EXPIRE_HOURS} horas.\n'
+        'Si no creaste esta cuenta, ignora este mensaje.'
+    )
+    html = f'''
+    <p>Gracias por crear tu cuenta en Aura Spa.</p>
+    <p><a href="{verification_link}">Verificar correo y activar cuenta</a></p>
+    <p>Este enlace expira en {settings.VERIFY_EMAIL_TOKEN_EXPIRE_HOURS} horas.</p>
+    <p>Si no creaste esta cuenta, ignora este mensaje.</p>
+    '''
+    send_email(to_email, subject, text, html)
+
+
 def send_password_reset_email(to_email: str, reset_link: str) -> None:
     subject = 'Aura Spa - Recuperacion de contrasena'
     text = (
@@ -36,12 +53,12 @@ def send_password_reset_email(to_email: str, reset_link: str) -> None:
         f'Este enlace expira en {settings.RESET_TOKEN_EXPIRE_MINUTES} minutos.\n'
         'Si no realizaste esta solicitud, ignora este mensaje.'
     )
-    html = f"""
+    html = f'''
     <p>Recibimos una solicitud para restablecer tu contrasena.</p>
-    <p><a href=\"{reset_link}\">Restablecer contrasena</a></p>
+    <p><a href="{reset_link}">Restablecer contrasena</a></p>
     <p>Este enlace expira en {settings.RESET_TOKEN_EXPIRE_MINUTES} minutos.</p>
     <p>Si no realizaste esta solicitud, ignora este mensaje.</p>
-    """
+    '''
     send_email(to_email, subject, text, html)
 
 
@@ -54,13 +71,13 @@ def send_contact_notification(to_email: str, sender_name: str, sender_email: str
         'Mensaje:\n'
         f'{message}\n'
     )
-    html = f"""
+    html = f'''
     <p>Se recibio un nuevo mensaje desde el formulario de contacto.</p>
     <p><strong>Nombre:</strong> {sender_name}</p>
     <p><strong>Correo:</strong> {sender_email}</p>
     <p><strong>Mensaje:</strong></p>
     <p>{message.replace('\n', '<br/>')}</p>
-    """
+    '''
     send_email(to_email, subject, text, html)
 
 
@@ -87,7 +104,7 @@ def send_appointment_confirmation_email(
         text += f'Observaciones: {notes_text}\n'
     text += '\nTe esperamos en Aura Spa.'
 
-    html = f"""
+    html = f'''
     <p>Hola {client_name},</p>
     <p>Tu cita fue confirmada con exito.</p>
     <ul>
@@ -96,7 +113,7 @@ def send_appointment_confirmation_email(
       <li><strong>Fecha:</strong> {date}</li>
       <li><strong>Hora:</strong> {time}</li>
     </ul>
-    """
+    '''
     if notes_text:
         html += f"<p><strong>Observaciones:</strong> {notes_text}</p>"
     html += '<p>Te esperamos en Aura Spa.</p>'

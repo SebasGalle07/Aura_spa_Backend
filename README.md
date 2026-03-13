@@ -95,14 +95,18 @@ Base URL: `http://localhost:8000/api/v1`
 - `GET /availability?service_id=..&professional_id=..&date=YYYY-MM-DD`
 
 **Appointments**
-- `POST /appointments` (cliente)
+- `POST /appointments` (cliente/admin, crea en `pending_payment` y bloquea cupo temporal)
 - `GET /appointments/my` (cliente)
 - `GET /appointments` (admin)
 - `GET /appointments/{id}`
-- `POST /appointments/{id}/confirm` (admin)
+- `POST /appointments/{id}/payments/init` (cliente/admin, inicia anticipo)
+- `POST /appointments/payments/webhook` (pasarela)
+- `POST /appointments/{id}/payments/mock-approve` (cliente/admin, solo entorno mock)
+- `POST /appointments/{id}/confirm` (admin, confirmacion manual solo con pago aprobado)
 - `POST /appointments/{id}/cancel` (cliente o admin)
-- `POST /appointments/{id}/attend` (admin o professional)
-- `POST /appointments/{id}/reschedule` (admin)
+- `POST /appointments/{id}/attend` (admin o professional, marca completada)
+- `POST /appointments/{id}/reschedule` (cliente/admin, requiere pago y >=48h)
+- `POST /appointments/expire-pending` (admin, ejecucion manual de expiracion)
 
 **Admin**
 - `GET /admin/summary?date=YYYY-MM-DD`

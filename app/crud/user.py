@@ -1,4 +1,5 @@
-﻿from datetime import date
+from datetime import date
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -15,13 +16,19 @@ def get_user_by_email(db: Session, email: str):
     return db.scalar(select(User).where(User.email == email))
 
 
-def create_user(db: Session, user_in: UserCreate | UserRegister, role: str | None = None):
+def create_user(
+    db: Session,
+    user_in: UserCreate | UserRegister,
+    role: str | None = None,
+    email_verified: bool = True,
+):
     user = User(
         email=user_in.email,
         hashed_password=get_password_hash(user_in.password),
         role=role or getattr(user_in, "role", "client"),
         name=user_in.name,
         phone=getattr(user_in, "phone", None),
+        email_verified=email_verified,
         created_at=date.today().isoformat(),
     )
     db.add(user)

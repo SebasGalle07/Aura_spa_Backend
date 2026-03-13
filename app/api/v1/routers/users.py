@@ -2,7 +2,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.security import require_roles, get_current_user, verify_password, get_password_hash, validate_password_length
+from app.core.security import require_roles, get_current_user, verify_password, get_password_hash, validate_password_security
 from app.db.deps import get_db
 from app.crud.user import get_user_by_id, get_user_by_email, create_user, update_user
 from app.models.user import User
@@ -34,7 +34,7 @@ def update_me(payload: UserUpdate, db: Session = Depends(get_db), current_user=D
 def change_password(payload: PasswordChange, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     if not verify_password(payload.current_password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
-    validate_password_length(payload.new_password)
+    validate_password_security(payload.new_password)
     current_user.hashed_password = get_password_hash(payload.new_password)
     db.add(current_user)
     db.commit()
@@ -51,6 +51,7 @@ def list_users(db: Session = Depends(get_db)):
 def create_user_admin(payload: UserCreate, db: Session = Depends(get_db)):
     if get_user_by_email(db, payload.email):
         raise HTTPException(status_code=400, detail="Email already registered")
+    validate_password_security(payload.password)
     return create_user(db, payload, role=payload.role)
 
 
@@ -65,6 +66,8 @@ def update_user_admin(user_id: int, payload: UserUpdate, db: Session = Depends(g
         existing = get_user_by_email(db, payload.email)
         if existing and existing.id != user.id:
             raise HTTPException(status_code=400, detail="Email already registered")
+    if payload.password:
+        validate_password_security(payload.password)
     return update_user(db, user, payload)
 
 

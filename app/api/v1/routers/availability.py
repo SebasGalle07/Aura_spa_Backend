@@ -5,7 +5,8 @@ from app.core.specialty_match import is_professional_compatible_with_service
 from app.db.deps import get_db
 from app.crud.service import get_service
 from app.crud.professional import get_professional
-from app.crud.appointment import list_appointments_by_professional_and_date_with_duration
+from app.crud.appointment import is_slot_blocked, list_appointments_by_professional_and_date_with_duration
+from app.services.reservation_workflow import expire_pending_appointments
 
 router = APIRouter()
 
@@ -31,6 +32,8 @@ def _to_minutes(time_str: str) -> int:
 
 @router.get("", response_model=list[str])
 def availability(service_id: int, professional_id: int, date: str, db: Session = Depends(get_db)):
+    expire_pending_appointments(db, commit=True)
+
     svc = get_service(db, service_id)
     pro = get_professional(db, professional_id)
     if not svc or not pro:
@@ -46,7 +49,7 @@ def availability(service_id: int, professional_id: int, date: str, db: Session =
         end = start + svc.duration
         overlap = False
         for apt, apt_duration in apts:
-            if apt.status == "cancelled":
+            if not is_slot_blocked(apt):
                 continue
             apt_start = _to_minutes(apt.time)
             apt_end = apt_start + (apt_duration or svc.duration)

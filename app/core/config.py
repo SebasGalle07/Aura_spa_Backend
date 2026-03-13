@@ -1,4 +1,4 @@
-﻿from urllib.parse import urlsplit
+from urllib.parse import urlsplit
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -19,7 +19,19 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     RESET_TOKEN_EXPIRE_MINUTES: int = 30
+    VERIFY_EMAIL_TOKEN_EXPIRE_HOURS: int = 24
+    VERIFY_EMAIL_RESEND_SECONDS: int = 60
     RETURN_RESET_TOKEN: bool = False
+    RESERVATION_HOLD_MINUTES: int = 15
+    RESERVATION_DEPOSIT_PERCENT: int = 30
+    RESERVATION_DEPOSIT_FIXED: int = 0
+    RESCHEDULE_MIN_HOURS: int = 48
+    RESERVATION_EXPIRER_INTERVAL_SECONDS: int = 30
+    RESERVATION_EXPIRER_ENABLED: bool = True
+
+    PAYMENT_PROVIDER: str = "mock"
+    PAYMENT_WEBHOOK_SECRET: str | None = None
+    PAYMENT_MOCK_CHECKOUT_BASE_URL: str = "http://localhost:4200"
 
     DATABASE_URL: str = 'postgresql+psycopg://postgres:CHANGE_ME@localhost:5432/aura_spa'
 

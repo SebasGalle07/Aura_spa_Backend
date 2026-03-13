@@ -1,5 +1,6 @@
-﻿from datetime import datetime, timedelta
+from datetime import datetime, timedelta
 from hashlib import sha256
+import re
 from typing import Iterable
 from uuid import uuid4
 
@@ -30,6 +31,20 @@ def validate_password_length(password: str) -> None:
     # bcrypt only supports 72 bytes
     if len(password.encode("utf-8")) > 72:
         raise HTTPException(status_code=400, detail="Password too long (max 72 bytes)")
+
+
+def validate_password_security(password: str) -> None:
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="La contrasena debe tener al menos 8 caracteres")
+    validate_password_length(password)
+    if not re.search(r"[A-Z]", password):
+        raise HTTPException(status_code=400, detail="La contrasena debe incluir al menos una mayuscula")
+    if not re.search(r"[a-z]", password):
+        raise HTTPException(status_code=400, detail="La contrasena debe incluir al menos una minuscula")
+    if not re.search(r"\d", password):
+        raise HTTPException(status_code=400, detail="La contrasena debe incluir al menos un numero")
+    if not re.search(r"[^A-Za-z0-9]", password):
+        raise HTTPException(status_code=400, detail="La contrasena debe incluir al menos un caracter especial")
 
 
 def _hash_token(token: str) -> str:
@@ -66,6 +81,12 @@ def create_reset_token(subject: str, expires_delta: timedelta | None = None) -> 
     if expires_delta is None:
         expires_delta = timedelta(minutes=settings.RESET_TOKEN_EXPIRE_MINUTES)
     return _create_token(subject, "reset", expires_delta)
+
+
+def create_email_verification_token(subject: str, expires_delta: timedelta | None = None) -> str:
+    if expires_delta is None:
+        expires_delta = timedelta(hours=settings.VERIFY_EMAIL_TOKEN_EXPIRE_HOURS)
+    return _create_token(subject, "verify_email", expires_delta)
 
 
 def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)):

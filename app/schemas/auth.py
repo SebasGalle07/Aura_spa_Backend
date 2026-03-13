@@ -1,4 +1,4 @@
-﻿from pydantic import EmailStr, ConfigDict
+from pydantic import ConfigDict, EmailStr
 
 from app.schemas.common import BaseSchema
 from app.schemas.user import UserOut
@@ -23,6 +23,11 @@ class Token(BaseSchema):
     user: UserOut
 
 
+class RegisterResponse(BaseSchema):
+    ok: bool = True
+    email_verification_required: bool = True
+
+
 class RefreshRequest(BaseSchema):
     refresh_token: str
 
@@ -39,3 +44,15 @@ class ForgotPasswordResponse(BaseSchema):
 class ResetPasswordRequest(BaseSchema):
     token: str
     new_password: str
+
+
+class ResendVerificationRequest(BaseSchema):
+    email: EmailStr
+
+
+class VerifyEmailRequest(BaseSchema):
+    token: str
+
+
+class VerifyEmailResponse(BaseSchema):
+    ok: bool = True

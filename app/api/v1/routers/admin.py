@@ -8,6 +8,7 @@ from app.core.security import require_roles
 from app.db.deps import get_db
 from app.crud.appointment import list_appointments
 from app.crud.company import get_or_create_company, update_company, update_branding
+from app.services.reservation_workflow import expire_pending_appointments
 from app.schemas.company import CompanyData, CompanyUpdate, Branding, BrandingUpdate
 from app.schemas.admin import AdminSummary, UploadImageResponse
 
@@ -16,14 +17,17 @@ router = APIRouter()
 
 @router.get("/summary", response_model=AdminSummary, dependencies=[Depends(require_roles("admin"))])
 def summary(date: str | None = None, db: Session = Depends(get_db)):
+    expire_pending_appointments(db, commit=True)
     target_date = date or dt_date.today().isoformat()
     appointments = list_appointments(db)
     today_apts = [a for a in appointments if a.date == target_date]
     return {
         "date": target_date,
         "today_total": len(today_apts),
+        "pending_payment": len([a for a in appointments if a.status == "pending_payment"]),
         "confirmed": len([a for a in appointments if a.status == "confirmed"]),
-        "attended": len([a for a in appointments if a.status == "attended"]),
+        "completed": len([a for a in appointments if a.status == "completed"]),
+        "expired": len([a for a in appointments if a.status == "expired"]),
         "cancelled": len([a for a in appointments if a.status == "cancelled"]),
         "rescheduled": len([a for a in appointments if a.status == "rescheduled"]),
         "agenda": today_apts,

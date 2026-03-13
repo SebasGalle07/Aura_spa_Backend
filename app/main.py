@@ -10,6 +10,7 @@ from app.db.session import engine
 from app.db.base import Base
 import app.models  # noqa: F401
 from app.seeds.seed_data import seed_data_if_needed
+from app.services.reservation_expirer import start_reservation_expirer, stop_reservation_expirer
 
 media_root = Path(settings.MEDIA_ROOT)
 media_root.mkdir(parents=True, exist_ok=True)
@@ -35,6 +36,12 @@ def on_startup():
         Base.metadata.create_all(bind=engine)
     if settings.SEED_ON_STARTUP:
         seed_data_if_needed()
+    start_reservation_expirer()
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    stop_reservation_expirer()
 
 
 app.include_router(api_router, prefix=settings.API_V1_STR)

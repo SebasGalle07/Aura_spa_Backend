@@ -1,119 +1,131 @@
 import logging
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.mailer import send_appointment_confirmation_email
+from app.core.security import get_current_user, require_roles
 from app.core.specialty_match import is_professional_compatible_with_service
-from app.core.security import require_roles, get_current_user
-from app.db.deps import get_db
-from app.crud.service import get_service
-from app.crud.professional import get_professional
 from app.crud.appointment import (
+    add_history,
+    add_status_log,
+    get_appointment,
+    get_appointment_for_update,
+    get_payment_by_reference,
     list_appointments,
     list_appointments_by_client,
-    list_appointments_by_professional_and_date_with_duration,
-    get_appointment,
-    create_appointment,
+    list_payments_by_appointment,
     update_appointment,
-    add_history,
 )
-from app.schemas.appointment import AppointmentOut, AppointmentCreate, AppointmentReschedule, AppointmentNotes
+from app.crud.professional import get_professional
+from app.crud.service import get_service
+from app.db.deps import get_db
+from app.schemas.appointment import (
+    AppointmentCreate,
+    AppointmentNotes,
+    AppointmentOut,
+    AppointmentPaymentInit,
+    AppointmentPaymentInitResponse,
+    AppointmentPaymentOut,
+    AppointmentReschedule,
+    PaymentWebhookPayload,
+    PaymentWebhookResponse,
+)
+from app.services.reservation_workflow import (
+    apply_payment_webhook,
+    cancel_appointment,
+    complete_appointment,
+    expire_pending_appointments,
+    get_checkout_url,
+    initialize_payment_for_appointment,
+    lock_slot_and_validate,
+    prepare_pending_appointment_data,
+    reschedule_appointment,
+)
+from app.crud.appointment import create_appointment
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def _to_minutes(time_str: str) -> int:
-    h, m = [int(x) for x in time_str.split(":")]
-    return h * 60 + m
+def _resolve_actor(current_user) -> tuple[str, int | None]:
+    if not current_user:
+        return "system", None
+    return current_user.role, current_user.id
 
 
-def _ensure_available(
-    db: Session,
-    professional_id: int,
-    date: str,
-    time: str,
-    duration: int,
-    appointment_id: int | None = None,
-):
-    existing = list_appointments_by_professional_and_date_with_duration(db, professional_id, date)
-    start = _to_minutes(time)
-    end = start + duration
-    for apt, apt_duration in existing:
-        if appointment_id is not None and apt.id == appointment_id:
-            continue
-        if apt.status == "cancelled":
-            continue
-        apt_start = _to_minutes(apt.time)
-        apt_end = apt_start + (apt_duration or duration)
-        if start < apt_end and apt_start < end:
-            raise HTTPException(status_code=409, detail="Slot not available")
+def _enforce_owner_or_admin(appointment, current_user):
+    if current_user.role == "admin":
+        return
+    if appointment.client_user_id is not None and appointment.client_user_id == current_user.id:
+        return
+    if appointment.client_email == current_user.email:
+        return
+    raise HTTPException(status_code=403, detail="Not enough permissions")
 
 
 @router.post("", response_model=AppointmentOut, dependencies=[Depends(require_roles("client", "admin"))])
 def create_one(payload: AppointmentCreate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    svc = get_service(db, payload.service_id)
-    pro = get_professional(db, payload.professional_id)
-    if not svc or not pro:
+    expire_pending_appointments(db)
+
+    service = get_service(db, payload.service_id)
+    professional = get_professional(db, payload.professional_id)
+    if not service or not professional:
         raise HTTPException(status_code=404, detail="Service or professional not found")
-    if not is_professional_compatible_with_service(svc.category, pro.specialty):
+    if not is_professional_compatible_with_service(service.category, professional.specialty):
         raise HTTPException(status_code=422, detail="El profesional seleccionado no presta este servicio")
 
-    _ensure_available(db, payload.professional_id, payload.date, payload.time, svc.duration)
+    lock_slot_and_validate(
+        db,
+        professional_id=payload.professional_id,
+        date=payload.date,
+        time=payload.time,
+        service_duration=service.duration,
+    )
 
     client_name = payload.client_name or current_user.name
     client_email = payload.client_email or current_user.email
-    client_phone = payload.client_phone or current_user.phone or ""
+    client_phone = payload.client_phone or current_user.phone
+    data = prepare_pending_appointment_data(
+        service,
+        client_user_id=current_user.id if current_user.role == "client" else None,
+        client_name=client_name,
+        client_email=client_email,
+        client_phone=client_phone,
+        professional_id=payload.professional_id,
+        date=payload.date,
+        time=payload.time,
+        notes=payload.notes,
+    )
 
-    data = {
-        "client_name": client_name,
-        "client_email": client_email,
-        "client_phone": client_phone,
-        "service_id": payload.service_id,
-        "professional_id": payload.professional_id,
-        "date": payload.date,
-        "time": payload.time,
-        "status": "confirmed",
-        "notes": payload.notes or "",
-        "history": [],
-    }
     try:
-        apt = create_appointment(db, data)
+        appointment = create_appointment(db, data)
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Slot not available")
-    add_history(apt, "Creada por cliente" if current_user.role == "client" else "Creada por admin")
+        raise HTTPException(status_code=409, detail="El horario ya fue reservado")
+
+    add_history(appointment, "Reserva creada. Pendiente de pago")
+    add_status_log(
+        db,
+        appointment_id=appointment.id,
+        from_status=None,
+        to_status=appointment.status,
+        reason="Reserva creada y cupo bloqueado temporalmente",
+        actor_type=current_user.role,
+        actor_id=current_user.id,
+    )
     db.commit()
-    db.refresh(apt)
-
-    if settings.smtp_enabled and apt.client_email:
-        try:
-            send_appointment_confirmation_email(
-                to_email=apt.client_email,
-                client_name=apt.client_name,
-                service_name=svc.name,
-                professional_name=pro.name,
-                date=apt.date,
-                time=apt.time,
-                notes=apt.notes,
-            )
-        except Exception as exc:
-            logger.exception(
-                'No se pudo enviar correo de confirmacion de cita id=%s email=%s: %s',
-                apt.id,
-                apt.client_email,
-                exc,
-            )
-
-    return apt
+    db.refresh(appointment)
+    return appointment
 
 
 @router.get("/my", response_model=list[AppointmentOut], dependencies=[Depends(require_roles("client"))])
 def my_appointments(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    return list_appointments_by_client(db, current_user.email)
+    expire_pending_appointments(db, commit=True)
+    return list_appointments_by_client(db, current_user.id, current_user.email)
 
 
 @router.get("", response_model=list[AppointmentOut], dependencies=[Depends(require_roles("admin"))])
@@ -124,6 +136,7 @@ def list_all(
     professional_id: int | None = None,
     db: Session = Depends(get_db),
 ):
+    expire_pending_appointments(db, commit=True)
     return list_appointments(
         db,
         date=date,
@@ -135,76 +148,287 @@ def list_all(
 
 @router.get("/{appointment_id}", response_model=AppointmentOut)
 def get_one(appointment_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    apt = get_appointment(db, appointment_id)
-    if not apt:
+    expire_pending_appointments(db, commit=True)
+    appointment = get_appointment(db, appointment_id)
+    if not appointment:
         raise HTTPException(status_code=404, detail="Appointment not found")
-    if current_user.role != "admin" and apt.client_email != current_user.email:
-        raise HTTPException(status_code=403, detail="Not enough permissions")
-    return apt
+    _enforce_owner_or_admin(appointment, current_user)
+    return appointment
+
+
+@router.post(
+    "/{appointment_id}/payments/init",
+    response_model=AppointmentPaymentInitResponse,
+    dependencies=[Depends(require_roles("client", "admin"))],
+)
+def init_payment(
+    appointment_id: int,
+    payload: AppointmentPaymentInit | None = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    expire_pending_appointments(db, commit=True)
+    appointment = get_appointment_for_update(db, appointment_id)
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    _enforce_owner_or_admin(appointment, current_user)
+
+    payment = initialize_payment_for_appointment(db, appointment, method=payload.method if payload else None)
+    update_appointment(
+        db,
+        appointment,
+        {
+            "payment_reference": payment.provider_reference,
+            "payment_provider": payment.provider,
+            "payment_method": payment.method,
+        },
+    )
+    db.commit()
+    return {
+        "appointment_id": appointment.id,
+        "payment_reference": payment.provider_reference,
+        "provider": payment.provider,
+        "amount": payment.amount,
+        "currency": payment.currency,
+        "payment_due_at": appointment.payment_due_at,
+        "status": payment.status,
+        "checkout_url": get_checkout_url(payment),
+    }
+
+
+@router.get(
+    "/{appointment_id}/payments",
+    response_model=list[AppointmentPaymentOut],
+    dependencies=[Depends(require_roles("client", "admin"))],
+)
+def list_appointment_payments(
+    appointment_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    appointment = get_appointment(db, appointment_id)
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    _enforce_owner_or_admin(appointment, current_user)
+    return list_payments_by_appointment(db, appointment_id)
+
+
+@router.post("/payments/webhook", response_model=PaymentWebhookResponse)
+def payment_webhook(
+    payload: PaymentWebhookPayload,
+    x_webhook_secret: str | None = Header(default=None, alias="X-Webhook-Secret"),
+    db: Session = Depends(get_db),
+):
+    if settings.PAYMENT_WEBHOOK_SECRET and x_webhook_secret != settings.PAYMENT_WEBHOOK_SECRET:
+        raise HTTPException(status_code=401, detail="Invalid webhook secret")
+
+    payment = get_payment_by_reference(db, payload.provider_reference, for_update=True)
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment reference not found")
+    appointment = get_appointment_for_update(db, payment.appointment_id)
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    appointment = apply_payment_webhook(
+        db,
+        payment=payment,
+        appointment=appointment,
+        provider_tx_id=payload.provider_tx_id,
+        status=payload.status,
+        method=payload.method,
+        amount=payload.amount,
+        metadata=payload.metadata,
+    )
+    db.commit()
+    db.refresh(appointment)
+
+    if appointment.status == "confirmed" and payload.status == "approved":
+        service = get_service(db, appointment.service_id)
+        professional = get_professional(db, appointment.professional_id)
+        if settings.smtp_enabled and service and professional and appointment.client_email:
+            try:
+                send_appointment_confirmation_email(
+                    to_email=appointment.client_email,
+                    client_name=appointment.client_name,
+                    service_name=service.name,
+                    professional_name=professional.name,
+                    date=appointment.date,
+                    time=appointment.time,
+                    notes=appointment.notes,
+                )
+            except Exception:
+                logger.exception("No fue posible enviar correo de confirmacion para cita %s", appointment.id)
+
+    return {
+        "ok": True,
+        "appointment_id": appointment.id,
+        "appointment_status": appointment.status,
+        "payment_status": appointment.payment_status,
+    }
+
+
+@router.post(
+    "/{appointment_id}/payments/mock-approve",
+    response_model=AppointmentOut,
+    dependencies=[Depends(require_roles("client", "admin"))],
+)
+def mock_approve_payment(
+    appointment_id: int,
+    payload: AppointmentPaymentInit | None = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    appointment = get_appointment_for_update(db, appointment_id)
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    _enforce_owner_or_admin(appointment, current_user)
+
+    payment = initialize_payment_for_appointment(db, appointment, method=payload.method if payload else "mock_card")
+    appointment = apply_payment_webhook(
+        db,
+        payment=payment,
+        appointment=appointment,
+        provider_tx_id=f"MOCK-{uuid4().hex[:12].upper()}",
+        status="approved",
+        method=payment.method or "mock_card",
+        amount=payment.amount,
+        metadata={"source": "mock_approve"},
+    )
+    db.commit()
+    db.refresh(appointment)
+    return appointment
 
 
 @router.post("/{appointment_id}/confirm", response_model=AppointmentOut, dependencies=[Depends(require_roles("admin"))])
 def confirm(appointment_id: int, payload: AppointmentNotes | None = None, db: Session = Depends(get_db)):
-    apt = get_appointment(db, appointment_id)
-    if not apt:
+    appointment = get_appointment_for_update(db, appointment_id)
+    if not appointment:
         raise HTTPException(status_code=404, detail="Appointment not found")
-    update_data = {"status": "confirmed"}
+    if appointment.payment_status != "approved":
+        raise HTTPException(status_code=409, detail="La reserva solo puede confirmarse tras pago aprobado")
+
+    previous_status = appointment.status
+    updates: dict = {"status": "confirmed"}
     if payload and payload.notes is not None:
-        update_data["notes"] = payload.notes
-    apt = update_appointment(db, apt, update_data)
-    add_history(apt, "Confirmada")
+        updates["notes"] = payload.notes
+    appointment = update_appointment(db, appointment, updates)
+    add_history(appointment, "Reserva confirmada por administrador")
+    add_status_log(
+        db,
+        appointment_id=appointment.id,
+        from_status=previous_status,
+        to_status="confirmed",
+        reason="Confirmacion manual de administrador",
+        actor_type="admin",
+    )
     db.commit()
-    db.refresh(apt)
-    return apt
+    db.refresh(appointment)
+    return appointment
 
 
 @router.post("/{appointment_id}/cancel", response_model=AppointmentOut)
-def cancel(appointment_id: int, payload: AppointmentNotes | None = None, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    apt = get_appointment(db, appointment_id)
-    if not apt:
+def cancel(
+    appointment_id: int,
+    payload: AppointmentNotes | None = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    appointment = get_appointment_for_update(db, appointment_id)
+    if not appointment:
         raise HTTPException(status_code=404, detail="Appointment not found")
-    if current_user.role != "admin" and apt.client_email != current_user.email:
-        raise HTTPException(status_code=403, detail="Not enough permissions")
-    update_data = {"status": "cancelled"}
-    if payload and payload.notes is not None:
-        update_data["notes"] = payload.notes
-    apt = update_appointment(db, apt, update_data)
-    add_history(apt, "Cancelada")
+    _enforce_owner_or_admin(appointment, current_user)
+    actor_type, actor_id = _resolve_actor(current_user)
+    appointment = cancel_appointment(
+        db,
+        appointment,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        reason=payload.notes if payload else None,
+    )
     db.commit()
-    db.refresh(apt)
-    return apt
+    db.refresh(appointment)
+    return appointment
 
 
-@router.post("/{appointment_id}/attend", response_model=AppointmentOut, dependencies=[Depends(require_roles("admin", "professional"))])
-def attend(appointment_id: int, payload: AppointmentNotes | None = None, db: Session = Depends(get_db)):
-    apt = get_appointment(db, appointment_id)
-    if not apt:
+@router.post(
+    "/{appointment_id}/attend",
+    response_model=AppointmentOut,
+    dependencies=[Depends(require_roles("admin", "professional"))],
+)
+def attend(
+    appointment_id: int,
+    payload: AppointmentNotes | None = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    appointment = get_appointment_for_update(db, appointment_id)
+    if not appointment:
         raise HTTPException(status_code=404, detail="Appointment not found")
-    update_data = {"status": "attended"}
-    if payload and payload.notes is not None:
-        update_data["notes"] = payload.notes
-    apt = update_appointment(db, apt, update_data)
-    add_history(apt, "Atendida")
+    actor_type, actor_id = _resolve_actor(current_user)
+    appointment = complete_appointment(
+        db,
+        appointment,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        reason=payload.notes if payload else None,
+    )
     db.commit()
-    db.refresh(apt)
-    return apt
+    db.refresh(appointment)
+    return appointment
 
 
-@router.post("/{appointment_id}/reschedule", response_model=AppointmentOut, dependencies=[Depends(require_roles("admin"))])
-def reschedule(appointment_id: int, payload: AppointmentReschedule, db: Session = Depends(get_db)):
-    apt = get_appointment(db, appointment_id)
-    if not apt:
+@router.post(
+    "/{appointment_id}/complete",
+    response_model=AppointmentOut,
+    dependencies=[Depends(require_roles("admin", "professional"))],
+)
+def complete(
+    appointment_id: int,
+    payload: AppointmentNotes | None = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return attend(appointment_id=appointment_id, payload=payload, db=db, current_user=current_user)
+
+
+@router.post("/{appointment_id}/reschedule", response_model=AppointmentOut)
+def reschedule(
+    appointment_id: int,
+    payload: AppointmentReschedule,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    appointment = get_appointment_for_update(db, appointment_id)
+    if not appointment:
         raise HTTPException(status_code=404, detail="Appointment not found")
-    svc = get_service(db, apt.service_id)
-    if not svc:
+    _enforce_owner_or_admin(appointment, current_user)
+
+    service = get_service(db, appointment.service_id)
+    if not service:
         raise HTTPException(status_code=404, detail="Service not found")
-    _ensure_available(db, apt.professional_id, payload.date, payload.time, svc.duration, appointment_id=apt.id)
+
+    actor_type, actor_id = _resolve_actor(current_user)
     try:
-        apt = update_appointment(db, apt, {"date": payload.date, "time": payload.time, "status": "rescheduled"})
+        appointment = reschedule_appointment(
+            db,
+            appointment,
+            service_duration=service.duration,
+            new_date=payload.date,
+            new_time=payload.time,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            reason=payload.reason,
+        )
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Slot not available")
-    add_history(apt, f"Reprogramada a {payload.date} {payload.time}")
+        raise HTTPException(status_code=409, detail="El horario seleccionado no esta disponible")
+
     db.commit()
-    db.refresh(apt)
-    return apt
+    db.refresh(appointment)
+    return appointment
+
+
+@router.post("/expire-pending", dependencies=[Depends(require_roles("admin"))])
+def expire_pending(db: Session = Depends(get_db)):
+    expired = expire_pending_appointments(db, commit=True)
+    return {"expired": expired}

@@ -1,4 +1,6 @@
+import re
 from typing import Literal
+
 from pydantic import EmailStr, field_validator
 
 from app.schemas.common import BaseSchema
@@ -17,11 +19,23 @@ def _validate_digits_phone(value: str | None) -> str | None:
     return clean
 
 
+def _validate_person_name(value: str | None) -> str | None:
+    if value is None:
+        return None
+    clean = value.strip()
+    if not clean:
+        raise ValueError("El nombre es obligatorio.")
+    if re.search(r"\d", clean):
+        raise ValueError("El nombre no puede contener numeros.")
+    return clean
+
+
 class UserBase(BaseSchema):
     email: EmailStr
     name: str
     phone: str | None = None
     role: Role
+    email_verified: bool = True
     created_at: str | None = None
 
 
@@ -31,6 +45,13 @@ class UserCreate(BaseSchema):
     name: str
     phone: str | None = None
     role: Role = "client"
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        validated = _validate_person_name(value)
+        assert validated is not None
+        return validated
 
     @field_validator("phone")
     @classmethod
@@ -43,6 +64,13 @@ class UserRegister(BaseSchema):
     password: str
     name: str
     phone: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        validated = _validate_person_name(value)
+        assert validated is not None
+        return validated
 
     @field_validator("phone")
     @classmethod
@@ -57,6 +85,11 @@ class UserUpdate(BaseSchema):
     role: Role | None = None
     password: str | None = None
 
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str | None) -> str | None:
+        return _validate_person_name(value)
+
     @field_validator("phone")
     @classmethod
     def validate_phone(cls, value: str | None) -> str | None:
@@ -69,6 +102,7 @@ class UserOut(BaseSchema):
     name: str
     phone: str | None = None
     role: Role
+    email_verified: bool = True
     created_at: str | None = None
 
 
