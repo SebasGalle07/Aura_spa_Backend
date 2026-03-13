@@ -13,6 +13,7 @@ AppointmentStatus = Literal[
     "cancelled",
     "rescheduled",
     "completed",
+    "attended",
     "no_show",
 ]
 PaymentStatus = Literal["pending", "approved", "rejected", "expired", "cancelled", "voided"]
