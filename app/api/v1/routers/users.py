@@ -7,6 +7,7 @@ from app.db.deps import get_db
 from app.crud.user import get_user_by_id, get_user_by_email, create_user, update_user
 from app.models.user import User
 from app.schemas.user import UserOut, UserCreate, UserUpdate, PasswordChange
+from app.services.email_verification import ensure_verification_email_available, send_verification_email_or_raise
 
 router = APIRouter()
 
@@ -26,7 +27,12 @@ def update_me(payload: UserUpdate, db: Session = Depends(get_db), current_user=D
         existing = get_user_by_email(db, data["email"])
         if existing and existing.id != current_user.id:
             raise HTTPException(status_code=400, detail="Email already registered")
+        if data["email"] != current_user.email:
+            data["email_verified"] = False
+            ensure_verification_email_available()
     updated = update_user(db, current_user, UserUpdate(**data))
+    if "email_verified" in data:
+        send_verification_email_or_raise(db, updated)
     return updated
 
 
@@ -60,15 +66,22 @@ def update_user_admin(user_id: int, payload: UserUpdate, db: Session = Depends(g
     user = get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    original_email = user.email
     if user.id == current_user.id and payload.role and payload.role != current_user.role:
         raise HTTPException(status_code=400, detail="Cannot change your own role")
     if payload.email:
         existing = get_user_by_email(db, payload.email)
         if existing and existing.id != user.id:
             raise HTTPException(status_code=400, detail="Email already registered")
+        if payload.email != original_email:
+            ensure_verification_email_available()
+            payload = UserUpdate(**(payload.model_dump(exclude_unset=True, by_alias=False) | {"email_verified": False}))
     if payload.password:
         validate_password_security(payload.password)
-    return update_user(db, user, payload)
+    updated = update_user(db, user, payload)
+    if payload.email and payload.email != original_email:
+        send_verification_email_or_raise(db, updated)
+    return updated
 
 
 @router.delete("/{user_id}", dependencies=[Depends(require_roles("admin"))])

@@ -22,7 +22,9 @@ class Settings(BaseSettings):
     VERIFY_EMAIL_TOKEN_EXPIRE_HOURS: int = 24
     VERIFY_EMAIL_RESEND_SECONDS: int = 60
     RETURN_RESET_TOKEN: bool = False
+    BUSINESS_TIMEZONE: str = "America/Bogota"
     RESERVATION_HOLD_MINUTES: int = 15
+    RESERVATION_MIN_LEAD_HOURS: int = 4
     RESERVATION_DEPOSIT_PERCENT: int = 30
     RESERVATION_DEPOSIT_FIXED: int = 0
     RESCHEDULE_MIN_HOURS: int = 48
@@ -32,6 +34,11 @@ class Settings(BaseSettings):
     PAYMENT_PROVIDER: str = "mock"
     PAYMENT_WEBHOOK_SECRET: str | None = None
     PAYMENT_MOCK_CHECKOUT_BASE_URL: str = "http://localhost:4200"
+    WOMPI_PUBLIC_KEY: str | None = None
+    WOMPI_INTEGRITY_SECRET: str | None = None
+    WOMPI_EVENT_SECRET: str | None = None
+    WOMPI_CHECKOUT_URL: str = "https://checkout.wompi.co/p/"
+    WOMPI_API_BASE_URL: str = "https://sandbox.wompi.co/v1"
 
     DATABASE_URL: str = 'postgresql+psycopg://postgres:CHANGE_ME@localhost:5432/aura_spa'
 

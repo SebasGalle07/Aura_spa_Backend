@@ -84,6 +84,7 @@ class UserUpdate(BaseSchema):
     phone: str | None = None
     role: Role | None = None
     password: str | None = None
+    email_verified: bool | None = None
 
     @field_validator("name")
     @classmethod

@@ -5,7 +5,7 @@ import zlib
 from sqlalchemy import and_, or_, select, text
 from sqlalchemy.orm import Session
 
-from app.core.reservation_rules import ACTIVE_BLOCKING_STATUSES, APPOINTMENT_PENDING_PAYMENT
+from app.core.reservation_rules import ACTIVE_BLOCKING_STATUSES, APPOINTMENT_PENDING_PAYMENT, current_business_datetime
 from app.models.appointment import Appointment, AppointmentReschedule, AppointmentStatusLog, Payment
 from app.models.service import Service
 
@@ -103,7 +103,7 @@ def update_appointment(db: Session, db_obj: Appointment, data: dict):
 
 def add_history(db_obj: Appointment, action: str):
     history = list(db_obj.history or [])
-    history.append({"action": action, "at": datetime.utcnow().isoformat(timespec="minutes")})
+    history.append({"action": action, "at": current_business_datetime().isoformat(timespec="minutes")})
     db_obj.history = history
 
 
@@ -228,7 +228,7 @@ def acquire_professional_day_lock(db: Session, professional_id: int, date: str) 
 
 
 def is_slot_blocked(appointment: Appointment, now: datetime | None = None) -> bool:
-    now_value = now or datetime.utcnow()
+    now_value = current_business_datetime(now)
     if appointment.status == APPOINTMENT_PENDING_PAYMENT:
         return bool(appointment.payment_due_at and appointment.payment_due_at > now_value)
     return appointment.status in ACTIVE_BLOCKING_STATUSES

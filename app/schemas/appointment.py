@@ -13,7 +13,6 @@ AppointmentStatus = Literal[
     "cancelled",
     "rescheduled",
     "completed",
-    "attended",
     "no_show",
 ]
 PaymentStatus = Literal["pending", "approved", "rejected", "expired", "cancelled", "voided"]
@@ -88,6 +87,11 @@ class AppointmentOut(BaseSchema):
     notes: str | None = ""
     history: list[AppointmentHistoryItem] = Field(default_factory=list)
 
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_status(cls, value: str) -> str:
+        return "completed" if value == "attended" else value
+
 
 class AppointmentReschedule(BaseSchema):
     date: str
@@ -115,6 +119,21 @@ class AppointmentPaymentInit(BaseSchema):
     method: str | None = None
 
 
+class AppointmentPaymentCheckoutData(BaseSchema):
+    provider: str
+    public_key: str | None = None
+    checkout_url: str | None = None
+    amount_in_cents: int | None = None
+    currency: str | None = None
+    reference: str | None = None
+    integrity_signature: str | None = None
+    redirect_url: str | None = None
+    expiration_time: str | None = None
+    customer_email: EmailStr | None = None
+    customer_full_name: str | None = None
+    customer_phone_number: str | None = None
+
+
 class AppointmentPaymentInitResponse(BaseSchema):
     appointment_id: int
     payment_reference: str
@@ -124,6 +143,7 @@ class AppointmentPaymentInitResponse(BaseSchema):
     payment_due_at: datetime | None = None
     status: PaymentStatus
     checkout_url: str | None = None
+    checkout_data: AppointmentPaymentCheckoutData | None = None
 
 
 class AppointmentPaymentOut(BaseSchema):
@@ -151,8 +171,20 @@ class PaymentWebhookPayload(BaseSchema):
     metadata: dict | None = None
 
 
+class MockPaymentResultPayload(BaseSchema):
+    provider_reference: str
+    status: Literal["approved", "rejected", "expired", "cancelled"]
+    method: str | None = None
+
+
 class PaymentWebhookResponse(BaseSchema):
     ok: bool = True
     appointment_id: int
     appointment_status: AppointmentStatus
     payment_status: PaymentStatus
+
+
+class PaymentSyncResponse(PaymentWebhookResponse):
+    provider_reference: str
+    provider_transaction_id: str | None = None
+    provider_transaction_status: str | None = None

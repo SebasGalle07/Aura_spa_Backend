@@ -44,6 +44,7 @@ def seed_data(db):
                 role=u["role"],
                 name=u["name"],
                 phone=u["phone"],
+                email_verified=True,
                 created_at=u["created_at"],
             )
         )

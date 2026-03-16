@@ -1,11 +1,12 @@
-﻿from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.reservation_rules import has_minimum_booking_notice
 from app.core.specialty_match import is_professional_compatible_with_service
-from app.db.deps import get_db
-from app.crud.service import get_service
-from app.crud.professional import get_professional
 from app.crud.appointment import is_slot_blocked, list_appointments_by_professional_and_date_with_duration
+from app.crud.professional import get_professional
+from app.crud.service import get_service
+from app.db.deps import get_db
 from app.services.reservation_workflow import expire_pending_appointments
 
 router = APIRouter()
@@ -45,6 +46,8 @@ def availability(service_id: int, professional_id: int, date: str, db: Session =
     apts = list_appointments_by_professional_and_date_with_duration(db, professional_id, date)
     available = []
     for slot in all_slots:
+        if not has_minimum_booking_notice(date, slot):
+            continue
         start = _to_minutes(slot)
         end = start + svc.duration
         overlap = False

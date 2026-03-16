@@ -24,7 +24,10 @@ from app.core.reservation_rules import (
     REPROGRAMMABLE_STATUSES,
     compute_deposit_amount,
     compute_payment_due_at,
+    current_business_datetime,
+    has_minimum_booking_notice,
     has_minimum_reschedule_notice,
+    is_future_slot,
 )
 from app.crud.appointment import (
     acquire_professional_day_lock,
@@ -42,6 +45,7 @@ from app.crud.appointment import (
 )
 from app.models.appointment import Appointment, Payment
 from app.models.service import Service
+from app.services.payment_gateway import ensure_wompi_checkout_configured
 
 
 def _to_minutes(time_str: str) -> int:
@@ -79,7 +83,7 @@ def _ensure_slot_available(
 
 
 def expire_pending_appointments(db: Session, now: datetime | None = None, commit: bool = False) -> int:
-    reference_time = now or datetime.utcnow()
+    reference_time = current_business_datetime(now)
     expirable = list_expirable_pending(db, reference_time)
     for appointment in expirable:
         from_status = appointment.status
@@ -117,6 +121,14 @@ def prepare_pending_appointment_data(
     time: str,
     notes: str | None = "",
 ) -> dict:
+    if not is_future_slot(date, time):
+        raise HTTPException(status_code=422, detail="La reserva debe programarse en una fecha y hora futura")
+    if not has_minimum_booking_notice(date, time):
+        raise HTTPException(
+            status_code=422,
+            detail=f"La reserva debe realizarse con al menos {settings.RESERVATION_MIN_LEAD_HOURS} horas de anticipacion",
+        )
+
     deposit_amount = compute_deposit_amount(service.price)
     total_price = Decimal(str(service.price))
     balance_amount = max(total_price - deposit_amount, Decimal("0"))
@@ -167,10 +179,13 @@ def initialize_payment_for_appointment(
     *,
     method: str | None = None,
 ) -> Payment:
+    if settings.PAYMENT_PROVIDER.lower() == "wompi":
+        ensure_wompi_checkout_configured()
+
     if appointment.status not in PAYABLE_RESERVATION_STATUSES:
         raise HTTPException(status_code=409, detail="La reserva no esta disponible para pago")
 
-    if appointment.payment_due_at and appointment.payment_due_at <= datetime.utcnow():
+    if appointment.payment_due_at and appointment.payment_due_at <= current_business_datetime():
         raise HTTPException(status_code=409, detail="La reserva ya expiro por tiempo limite de pago")
 
     pending = get_pending_payment_by_appointment(db, appointment.id)
@@ -225,12 +240,12 @@ def apply_payment_webhook(
     if amount is not None:
         update_payload["amount"] = amount
     if status == PAYMENT_APPROVED:
-        update_payload["paid_at"] = datetime.utcnow()
+        update_payload["paid_at"] = current_business_datetime()
     payment = update_payment(db, payment, update_payload)
 
     if status == PAYMENT_APPROVED:
         if appointment.status == APPOINTMENT_PENDING_PAYMENT and (
-            appointment.payment_due_at is None or appointment.payment_due_at > datetime.utcnow()
+            appointment.payment_due_at is None or appointment.payment_due_at > current_business_datetime()
         ):
             previous_status = appointment.status
             paid_amount = max(Decimal(str(payment.amount)), Decimal(str(appointment.paid_amount or 0)))
@@ -307,6 +322,8 @@ def cancel_appointment(
 ) -> Appointment:
     if appointment.status not in CANCELLABLE_STATUSES:
         raise HTTPException(status_code=409, detail="La reserva no puede cancelarse en su estado actual")
+    if not is_future_slot(appointment.date, appointment.time):
+        raise HTTPException(status_code=409, detail="No puedes cancelar una reserva cuya fecha y hora ya pasaron")
 
     previous_status = appointment.status
     next_payment_status = appointment.payment_status
@@ -323,7 +340,7 @@ def cancel_appointment(
         {
             "status": APPOINTMENT_CANCELLED,
             "payment_status": next_payment_status,
-            "cancelled_at": datetime.utcnow(),
+            "cancelled_at": current_business_datetime(),
         },
     )
     add_history(appointment, "Reserva cancelada")
@@ -357,6 +374,13 @@ def reschedule_appointment(
         raise HTTPException(status_code=409, detail="La reserva debe tener pago aprobado para reprogramarse")
     if not has_minimum_reschedule_notice(appointment.date, appointment.time):
         raise HTTPException(status_code=409, detail="La reprogramacion requiere al menos 48 horas de anticipacion")
+    if not is_future_slot(new_date, new_time):
+        raise HTTPException(status_code=422, detail="La nueva fecha y hora deben ser futuras")
+    if not has_minimum_booking_notice(new_date, new_time):
+        raise HTTPException(
+            status_code=422,
+            detail=f"La nueva fecha debe tener al menos {settings.RESERVATION_MIN_LEAD_HOURS} horas de anticipacion",
+        )
 
     lock_dates = {appointment.date, new_date}
     for lock_date in sorted(lock_dates):
@@ -411,6 +435,29 @@ def reschedule_appointment(
     )
     add_history(appointment, f"Reserva reprogramada a {new_date} {new_time}")
     return appointment
+
+
+def process_mock_payment_result(
+    db: Session,
+    *,
+    payment: Payment,
+    appointment: Appointment,
+    status: str,
+    method: str | None = None,
+) -> Appointment:
+    if status not in {PAYMENT_APPROVED, PAYMENT_REJECTED, PAYMENT_EXPIRED, PAYMENT_CANCELLED}:
+        raise HTTPException(status_code=422, detail="Estado de pago simulado no valido")
+
+    return apply_payment_webhook(
+        db,
+        payment=payment,
+        appointment=appointment,
+        provider_tx_id=f"MOCK-{status.upper()}-{uuid4().hex[:12].upper()}",
+        status=status,
+        method=method or "mock_card",
+        amount=payment.amount,
+        metadata={"source": "mock_checkout"},
+    )
 
 
 def complete_appointment(

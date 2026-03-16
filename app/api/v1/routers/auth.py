@@ -10,10 +10,9 @@ from jose import JWTError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.mailer import send_email_verification_email, send_password_reset_email
+from app.core.mailer import send_password_reset_email
 from app.core.security import (
     create_access_token,
-    create_email_verification_token,
     create_refresh_token,
     create_reset_token,
     decode_token,
@@ -28,7 +27,6 @@ from app.crud.token import (
     get_refresh_token,
     get_reset_token,
     revoke_refresh_token,
-    store_email_verification_token,
     store_refresh_token,
     store_reset_token,
 )
@@ -48,6 +46,7 @@ from app.schemas.auth import (
     VerifyEmailResponse,
 )
 from app.schemas.user import UserOut, UserRegister
+from app.services.email_verification import send_verification_email_or_raise
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -77,29 +76,6 @@ def _issue_session_tokens(db: Session, user) -> dict:
 def _build_reset_link(token: str) -> str:
     base = settings.FRONTEND_APP_URL.rstrip('/')
     return f'{base}/forgot-password?token={quote(token)}'
-
-
-def _build_verify_email_link(token: str) -> str:
-    base = settings.FRONTEND_APP_URL.rstrip('/')
-    return f'{base}/verify-email?token={quote(token)}'
-
-
-def _send_verification_email_or_raise(db: Session, user) -> None:
-    if not settings.smtp_enabled:
-        logger.error('Verificacion por correo no disponible: SMTP no configurado')
-        raise HTTPException(status_code=503, detail='Verificacion por correo no disponible')
-
-    token = create_email_verification_token(subject=str(user.id))
-    expires_at = _expiry_datetime_from_token(token)
-
-    try:
-        send_email_verification_email(user.email, _build_verify_email_link(token))
-        store_email_verification_token(db, user.id, hash_token(token), expires_at)
-        logger.info('Correo de verificacion enviado a %s', user.email)
-    except Exception as exc:
-        logger.exception('Fallo envio de verificacion para %s: %s', user.email, exc)
-        raise HTTPException(status_code=500, detail='No fue posible enviar el correo de verificacion')
-
 
 def _verify_google_id_token(id_token: str) -> dict:
     if not settings.google_login_enabled:
@@ -138,7 +114,7 @@ def register(user_in: UserRegister, db: Session = Depends(get_db)):
     existing_user = get_user_by_email(db, user_in.email)
     if existing_user:
         if not existing_user.email_verified:
-            _send_verification_email_or_raise(db, existing_user)
+            send_verification_email_or_raise(db, existing_user)
             return {'ok': True, 'email_verification_required': True}
         logger.warning('Registro rechazado por email duplicado: %s', user_in.email)
         raise HTTPException(status_code=400, detail='El correo ya esta registrado')
@@ -146,7 +122,7 @@ def register(user_in: UserRegister, db: Session = Depends(get_db)):
     user = create_user(db, user_in, role='client', email_verified=False)
     logger.info('Usuario registrado pendiente de verificacion: id=%s email=%s', user.id, user.email)
     try:
-        _send_verification_email_or_raise(db, user)
+        send_verification_email_or_raise(db, user)
     except HTTPException:
         db.delete(user)
         db.commit()
@@ -169,7 +145,7 @@ def resend_verification(payload: ResendVerificationRequest, db: Session = Depend
         if elapsed < settings.VERIFY_EMAIL_RESEND_SECONDS:
             return {'ok': True}
 
-    _send_verification_email_or_raise(db, user)
+    send_verification_email_or_raise(db, user)
     return {'ok': True}
 
 
@@ -288,6 +264,12 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
     if user is None:
         logger.warning('Refresh rechazado: usuario no encontrado')
         raise credentials_exception
+    if not user.email_verified:
+        logger.warning('Refresh rechazado: correo no verificado para user_id=%s', user.id)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='Debes verificar tu correo antes de continuar',
+        )
 
     revoke_refresh_token(db, stored_token)
     logger.info('Refresh exitoso para user_id=%s', user.id)

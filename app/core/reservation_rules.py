@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
+from zoneinfo import ZoneInfo
 
 from app.core.config import settings
 
@@ -41,8 +42,15 @@ def compute_deposit_amount(service_price: int) -> Decimal:
     return amount
 
 
+def current_business_datetime(now: datetime | None = None) -> datetime:
+    if now is not None:
+        return now
+    timezone = ZoneInfo(settings.BUSINESS_TIMEZONE)
+    return datetime.now(timezone).replace(tzinfo=None)
+
+
 def compute_payment_due_at(now: datetime | None = None) -> datetime:
-    base = now or datetime.utcnow()
+    base = current_business_datetime(now)
     return base + timedelta(minutes=settings.RESERVATION_HOLD_MINUTES)
 
 
@@ -50,7 +58,17 @@ def parse_slot_datetime(date: str, time: str) -> datetime:
     return datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
 
 
+def is_future_slot(date: str, time: str, now: datetime | None = None) -> bool:
+    return parse_slot_datetime(date, time) > current_business_datetime(now)
+
+
+def has_minimum_booking_notice(date: str, time: str, now: datetime | None = None) -> bool:
+    base = current_business_datetime(now)
+    scheduled_at = parse_slot_datetime(date, time)
+    return (scheduled_at - base) >= timedelta(hours=settings.RESERVATION_MIN_LEAD_HOURS)
+
+
 def has_minimum_reschedule_notice(date: str, time: str, now: datetime | None = None) -> bool:
-    base = now or datetime.now()
+    base = current_business_datetime(now)
     scheduled_at = parse_slot_datetime(date, time)
     return (scheduled_at - base) >= timedelta(hours=settings.RESCHEDULE_MIN_HOURS)
