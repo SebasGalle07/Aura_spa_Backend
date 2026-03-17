@@ -47,6 +47,7 @@ from app.schemas.auth import (
 )
 from app.schemas.user import UserOut, UserRegister
 from app.services.email_verification import send_verification_email_or_raise
+from app.monitoring.metrics import observe_auth_attempt
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -187,16 +188,19 @@ def verify_email(payload: VerifyEmailRequest, db: Session = Depends(get_db)):
 def login(data: LoginRequest, db: Session = Depends(get_db)):
     user = authenticate_user(db, data.email, data.password)
     if not user:
+        observe_auth_attempt("password", "failed")
         logger.warning('Login fallido para email=%s', data.email)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Correo o contrasena incorrectos')
 
     if not user.email_verified:
+        observe_auth_attempt("password", "blocked_unverified")
         logger.warning('Login bloqueado por correo no verificado: user_id=%s email=%s', user.id, user.email)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail='Debes verificar tu correo antes de iniciar sesion',
         )
 
+    observe_auth_attempt("password", "success")
     logger.info('Login exitoso: id=%s email=%s', user.id, user.email)
     return _issue_session_tokens(db, user)
 
@@ -228,6 +232,7 @@ def login_google(payload: GoogleLoginRequest, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(user)
 
+    observe_auth_attempt("google", "success")
     logger.info('Login Google exitoso: id=%s email=%s', user.id, user.email)
     return _issue_session_tokens(db, user)
 

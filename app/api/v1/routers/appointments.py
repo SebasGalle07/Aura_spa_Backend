@@ -40,9 +40,12 @@ from app.schemas.appointment import (
 from app.services.payment_gateway import (
     fetch_wompi_transaction,
     get_checkout_payload,
+    map_payu_status,
     map_wompi_transaction_status,
+    verify_payu_confirmation_signature,
     verify_wompi_event_signature,
 )
+from app.monitoring.metrics import observe_appointment_event, observe_appointment_transition
 from app.services.reservation_workflow import (
     apply_payment_webhook,
     cancel_appointment,
@@ -131,9 +134,14 @@ def create_one(payload: AppointmentCreate, db: Session = Depends(get_db), curren
         service_duration=service.duration,
     )
 
-    client_name = payload.client_name or current_user.name
-    client_email = payload.client_email or current_user.email
-    client_phone = payload.client_phone or current_user.phone
+    if current_user.role == "client":
+        client_name = current_user.name
+        client_email = current_user.email
+        client_phone = payload.client_phone or current_user.phone
+    else:
+        client_name = payload.client_name or current_user.name
+        client_email = payload.client_email or current_user.email
+        client_phone = payload.client_phone or current_user.phone
     data = prepare_pending_appointment_data(
         service,
         client_user_id=current_user.id if current_user.role == "client" else None,
@@ -162,6 +170,8 @@ def create_one(payload: AppointmentCreate, db: Session = Depends(get_db), curren
         actor_type=current_user.role,
         actor_id=current_user.id,
     )
+    observe_appointment_event("created", appointment.status)
+    observe_appointment_transition(None, appointment.status)
     db.commit()
     db.refresh(appointment)
     return appointment
@@ -306,6 +316,49 @@ def payment_webhook(
         "appointment_status": appointment.status,
         "payment_status": appointment.payment_status,
     }
+
+
+@router.api_route("/payments/payu/confirmation", methods=["GET", "POST"], response_model=dict)
+async def payu_payment_confirmation(request: Request, db: Session = Depends(get_db)):
+    if request.method == "POST":
+        form = await request.form()
+        payload = dict(form.items())
+    else:
+        payload = dict(request.query_params.items())
+
+    if not payload:
+        raise HTTPException(status_code=400, detail="No se recibio informacion de confirmacion")
+    if not verify_payu_confirmation_signature(payload):
+        raise HTTPException(status_code=401, detail="Firma de confirmacion invalida")
+
+    reference = str(payload.get("reference_sale") or payload.get("referenceCode") or "").strip()
+    state_pol = str(payload.get("state_pol") or payload.get("transactionState") or "").strip()
+    provider_tx_id = str(payload.get("transaction_id") or payload.get("transactionId") or "").strip()
+    mapped_status = map_payu_status(state_pol)
+    if not reference or not provider_tx_id or not mapped_status:
+        return {"ok": True, "ignored": True}
+
+    payment = get_payment_by_reference(db, reference, for_update=True)
+    if not payment:
+        return {"ok": True, "ignored": True}
+    appointment = get_appointment_for_update(db, payment.appointment_id)
+    if not appointment:
+        return {"ok": True, "ignored": True}
+
+    appointment = apply_payment_webhook(
+        db,
+        payment=payment,
+        appointment=appointment,
+        provider_tx_id=provider_tx_id,
+        status=mapped_status,
+        method=str(payload.get("payment_method_name") or payload.get("lapPaymentMethod") or "payu"),
+        amount=Decimal(str(payload.get("value") or payload.get("TX_VALUE") or payment.amount)),
+        metadata={"source": "payu_confirmation", "payload": payload},
+    )
+    db.commit()
+    db.refresh(appointment)
+    _send_confirmation_email_if_needed(db, appointment, mapped_status)
+    return {"ok": True}
 
 
 @router.post("/payments/wompi/webhook", response_model=dict)

@@ -30,10 +30,20 @@ class Settings(BaseSettings):
     RESCHEDULE_MIN_HOURS: int = 48
     RESERVATION_EXPIRER_INTERVAL_SECONDS: int = 30
     RESERVATION_EXPIRER_ENABLED: bool = True
+    PROMETHEUS_ENABLED: bool = True
+    METRICS_PATH: str = "/metrics"
 
     PAYMENT_PROVIDER: str = "mock"
     PAYMENT_WEBHOOK_SECRET: str | None = None
     PAYMENT_MOCK_CHECKOUT_BASE_URL: str = "http://localhost:4200"
+    BACKEND_PUBLIC_URL: str = "http://localhost:8000"
+    PAYU_ENV: str = "sandbox"
+    PAYU_MERCHANT_ID: str | None = None
+    PAYU_ACCOUNT_ID: str | None = None
+    PAYU_API_LOGIN: str | None = None
+    PAYU_API_KEY: str | None = None
+    PAYU_CHECKOUT_URL: str = "https://sandbox.checkout.payulatam.com/ppp-web-gateway-payu/"
+    PAYU_SIGNATURE_ALGORITHM: str = "MD5"
     WOMPI_PUBLIC_KEY: str | None = None
     WOMPI_INTEGRITY_SECRET: str | None = None
     WOMPI_EVENT_SECRET: str | None = None

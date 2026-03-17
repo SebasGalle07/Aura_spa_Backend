@@ -45,7 +45,12 @@ from app.crud.appointment import (
 )
 from app.models.appointment import Appointment, Payment
 from app.models.service import Service
-from app.services.payment_gateway import ensure_wompi_checkout_configured
+from app.monitoring.metrics import (
+    observe_appointment_event,
+    observe_appointment_transition,
+    observe_payment_event,
+)
+from app.services.payment_gateway import ensure_payu_checkout_configured, ensure_wompi_checkout_configured
 
 
 def _to_minutes(time_str: str) -> int:
@@ -104,6 +109,9 @@ def expire_pending_appointments(db: Session, now: datetime | None = None, commit
             reason="No se recibio pago dentro del tiempo limite",
             actor_type="system",
         )
+        observe_appointment_event("expired", APPOINTMENT_EXPIRED)
+        observe_appointment_transition(from_status, APPOINTMENT_EXPIRED)
+        observe_payment_event(appointment.payment_provider, PAYMENT_EXPIRED)
     if commit and expirable:
         db.commit()
     return len(expirable)
@@ -179,8 +187,11 @@ def initialize_payment_for_appointment(
     *,
     method: str | None = None,
 ) -> Payment:
-    if settings.PAYMENT_PROVIDER.lower() == "wompi":
+    provider = settings.PAYMENT_PROVIDER.lower()
+    if provider == "wompi":
         ensure_wompi_checkout_configured()
+    if provider == "payu":
+        ensure_payu_checkout_configured()
 
     if appointment.status not in PAYABLE_RESERVATION_STATUSES:
         raise HTTPException(status_code=409, detail="La reserva no esta disponible para pago")
@@ -242,6 +253,7 @@ def apply_payment_webhook(
     if status == PAYMENT_APPROVED:
         update_payload["paid_at"] = current_business_datetime()
     payment = update_payment(db, payment, update_payload)
+    observe_payment_event(payment.provider, status)
 
     if status == PAYMENT_APPROVED:
         if appointment.status == APPOINTMENT_PENDING_PAYMENT and (
@@ -273,6 +285,8 @@ def apply_payment_webhook(
                 metadata_json={"payment_reference": payment.provider_reference},
             )
             add_history(appointment, "Pago aprobado. Reserva confirmada")
+            observe_appointment_event("confirmed", APPOINTMENT_CONFIRMED)
+            observe_appointment_transition(previous_status, APPOINTMENT_CONFIRMED)
             return appointment
 
         if appointment.status == APPOINTMENT_PENDING_PAYMENT:
@@ -298,6 +312,8 @@ def apply_payment_webhook(
                 actor_type="system",
             )
             add_history(appointment, "Pago aprobado fuera de tiempo. Reserva expirada")
+            observe_appointment_event("expired_after_payment", APPOINTMENT_EXPIRED)
+            observe_appointment_transition(previous_status, APPOINTMENT_EXPIRED)
             return appointment
 
         update_appointment(db, appointment, {"payment_status": PAYMENT_APPROVED})
@@ -324,8 +340,11 @@ def cancel_appointment(
         raise HTTPException(status_code=409, detail="La reserva no puede cancelarse en su estado actual")
     if not is_future_slot(appointment.date, appointment.time):
         raise HTTPException(status_code=409, detail="No puedes cancelar una reserva cuya fecha y hora ya pasaron")
+    if not has_minimum_reschedule_notice(appointment.date, appointment.time):
+        raise HTTPException(status_code=409, detail="La cancelacion requiere al menos 48 horas de anticipacion")
 
     previous_status = appointment.status
+    previous_payment_status = appointment.payment_status
     next_payment_status = appointment.payment_status
     metadata: dict = {}
     if appointment.payment_status == PAYMENT_PENDING:
@@ -354,6 +373,10 @@ def cancel_appointment(
         actor_id=actor_id,
         metadata_json=metadata or None,
     )
+    observe_appointment_event("cancelled", APPOINTMENT_CANCELLED)
+    observe_appointment_transition(previous_status, APPOINTMENT_CANCELLED)
+    if next_payment_status != previous_payment_status:
+        observe_payment_event(appointment.payment_provider, next_payment_status)
     return appointment
 
 
@@ -434,6 +457,8 @@ def reschedule_appointment(
         },
     )
     add_history(appointment, f"Reserva reprogramada a {new_date} {new_time}")
+    observe_appointment_event("rescheduled", APPOINTMENT_RESCHEDULED)
+    observe_appointment_transition(previous_status, APPOINTMENT_RESCHEDULED)
     return appointment
 
 
@@ -483,4 +508,6 @@ def complete_appointment(
         actor_type=actor_type,
         actor_id=actor_id,
     )
+    observe_appointment_event("completed", APPOINTMENT_COMPLETED)
+    observe_appointment_transition(previous_status, APPOINTMENT_COMPLETED)
     return appointment

@@ -123,6 +123,21 @@ class AppointmentPaymentCheckoutData(BaseSchema):
     provider: str
     public_key: str | None = None
     checkout_url: str | None = None
+    merchant_id: str | None = None
+    account_id: str | None = None
+    reference_code: str | None = None
+    description: str | None = None
+    amount: str | None = None
+    tax: str | None = None
+    tax_return_base: str | None = None
+    signature: str | None = None
+    signature_algorithm: str | None = None
+    test: str | None = None
+    buyer_email: EmailStr | None = None
+    response_url: str | None = None
+    confirmation_url: str | None = None
+    payer_full_name: str | None = None
+    mobile_phone: str | None = None
     amount_in_cents: int | None = None
     currency: str | None = None
     reference: str | None = None

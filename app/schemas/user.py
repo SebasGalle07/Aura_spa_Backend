@@ -63,7 +63,7 @@ class UserRegister(BaseSchema):
     email: EmailStr
     password: str
     name: str
-    phone: str | None = None
+    phone: str
 
     @field_validator("name")
     @classmethod
@@ -74,8 +74,11 @@ class UserRegister(BaseSchema):
 
     @field_validator("phone")
     @classmethod
-    def validate_phone(cls, value: str | None) -> str | None:
-        return _validate_digits_phone(value)
+    def validate_phone(cls, value: str | None) -> str:
+        validated = _validate_digits_phone(value)
+        if validated is None:
+            raise ValueError("El telefono es obligatorio.")
+        return validated
 
 
 class UserUpdate(BaseSchema):
