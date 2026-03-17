@@ -45,7 +45,7 @@ from app.schemas.auth import (
     VerifyEmailRequest,
     VerifyEmailResponse,
 )
-from app.schemas.user import UserOut, UserRegister
+from app.schemas.user import UserCreate, UserOut, UserRegister
 from app.services.email_verification import send_verification_email_or_raise
 from app.monitoring.metrics import observe_auth_attempt
 
@@ -218,11 +218,12 @@ def login_google(payload: GoogleLoginRequest, db: Session = Depends(get_db)):
         default_name = email.split('@', 1)[0]
         raw_name = (token_data.get('name') or token_data.get('given_name') or default_name).strip() or default_name
         name = ''.join(ch for ch in raw_name if not ch.isdigit()).strip() or 'Usuario Google'
-        google_user = UserRegister(
+        google_user = UserCreate(
             email=email,
             password=secrets.token_urlsafe(32),
             name=name,
             phone=None,
+            role='client',
         )
         user = create_user(db, google_user, role='client', email_verified=True)
         logger.info('Usuario creado por login Google: id=%s email=%s', user.id, user.email)
