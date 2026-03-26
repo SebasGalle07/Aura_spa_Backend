@@ -1,7 +1,10 @@
-﻿from fastapi import APIRouter, Depends, HTTPException
+﻿from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.mailer import send_email_change_alert_email
 from app.core.security import require_roles, get_current_user, verify_password, get_password_hash, validate_password_security
 from app.db.deps import get_db
 from app.crud.user import get_user_by_id, get_user_by_email, create_user, update_user
@@ -20,6 +23,7 @@ def me(current_user=Depends(get_current_user)):
 @router.put("/me", response_model=UserOut)
 def update_me(payload: UserUpdate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     data = payload.model_dump(exclude_unset=True, by_alias=False)
+    previous_email = current_user.email
     for key in list(data.keys()):
         if key not in {"name", "email", "phone"}:
             data.pop(key, None)
@@ -30,6 +34,13 @@ def update_me(payload: UserUpdate, db: Session = Depends(get_db), current_user=D
         if data["email"] != current_user.email:
             data["email_verified"] = False
             ensure_verification_email_available()
+            send_email_change_alert_email(
+                previous_email,
+                current_user.name,
+                previous_email,
+                data["email"],
+                requested_at=datetime.utcnow(),
+            )
     updated = update_user(db, current_user, UserUpdate(**data))
     if "email_verified" in data:
         send_verification_email_or_raise(db, updated)
@@ -75,6 +86,13 @@ def update_user_admin(user_id: int, payload: UserUpdate, db: Session = Depends(g
             raise HTTPException(status_code=400, detail="Email already registered")
         if payload.email != original_email:
             ensure_verification_email_available()
+            send_email_change_alert_email(
+                original_email,
+                user.name,
+                original_email,
+                payload.email,
+                requested_at=datetime.utcnow(),
+            )
             payload = UserUpdate(**(payload.model_dump(exclude_unset=True, by_alias=False) | {"email_verified": False}))
     if payload.password:
         validate_password_security(payload.password)

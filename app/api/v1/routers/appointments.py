@@ -115,7 +115,7 @@ def _payment_init_response(appointment, payment) -> dict:
     }
 
 
-@router.post("", response_model=AppointmentOut, dependencies=[Depends(require_roles("client", "admin"))])
+@router.post("", response_model=AppointmentOut, dependencies=[Depends(require_roles("client"))])
 def create_one(payload: AppointmentCreate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     expire_pending_appointments(db)
 
@@ -214,7 +214,7 @@ def get_one(appointment_id: int, db: Session = Depends(get_db), current_user=Dep
 @router.post(
     "/{appointment_id}/payments/init",
     response_model=AppointmentPaymentInitResponse,
-    dependencies=[Depends(require_roles("client", "admin"))],
+    dependencies=[Depends(require_roles("client"))],
 )
 def init_payment(
     appointment_id: int,
@@ -262,7 +262,7 @@ def list_appointment_payments(
 @router.get(
     "/payments/by-reference/{provider_reference}",
     response_model=AppointmentPaymentInitResponse,
-    dependencies=[Depends(require_roles("client", "admin"))],
+    dependencies=[Depends(require_roles("client"))],
 )
 def get_payment_checkout_data(
     provider_reference: str,
@@ -404,7 +404,7 @@ async def wompi_payment_webhook(request: Request, db: Session = Depends(get_db))
 @router.get(
     "/payments/wompi/transactions/{transaction_id}",
     response_model=PaymentSyncResponse,
-    dependencies=[Depends(require_roles("client", "admin"))],
+    dependencies=[Depends(require_roles("client"))],
 )
 def sync_wompi_transaction(
     transaction_id: str,
@@ -460,7 +460,7 @@ def sync_wompi_transaction(
 @router.post(
     "/payments/mock-checkout/complete",
     response_model=AppointmentOut,
-    dependencies=[Depends(require_roles("client", "admin"))],
+    dependencies=[Depends(require_roles("client"))],
 )
 def complete_mock_payment(
     payload: MockPaymentResultPayload,
@@ -492,7 +492,7 @@ def complete_mock_payment(
 @router.post(
     "/{appointment_id}/payments/mock-approve",
     response_model=AppointmentOut,
-    dependencies=[Depends(require_roles("client", "admin"))],
+    dependencies=[Depends(require_roles("client"))],
 )
 def mock_approve_payment(
     appointment_id: int,

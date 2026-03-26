@@ -1,6 +1,7 @@
 import html
 import smtplib
 from email.message import EmailMessage
+from datetime import datetime
 
 from app.core.config import settings
 
@@ -305,5 +306,45 @@ def send_appointment_confirmation_email(
         ],
         badge="Confirmada",
         tone="success",
+    )
+    send_email(to_email, subject, text, html_body)
+
+
+def send_email_change_alert_email(
+    to_email: str,
+    account_name: str,
+    previous_email: str,
+    new_email: str,
+    requested_at: datetime | None = None,
+) -> None:
+    event_time = (requested_at or datetime.utcnow()).strftime("%Y-%m-%d %H:%M UTC")
+    subject = "Aura Spa - Aviso de cambio de correo"
+    text = (
+        f"Hola {account_name},\n\n"
+        "Recibimos una solicitud para cambiar el correo asociado a tu cuenta de Aura Spa.\n\n"
+        f"Correo anterior: {previous_email}\n"
+        f"Correo nuevo solicitado: {new_email}\n"
+        f"Fecha y hora de la solicitud: {event_time}\n\n"
+        "Si reconoces este cambio, no necesitas hacer nada en este correo.\n"
+        "Si no autorizaste esta solicitud, te recomendamos contactarnos de inmediato."
+    )
+    html_body = _build_email_layout(
+        preheader="Detectamos una solicitud de cambio de correo en tu cuenta de Aura Spa.",
+        eyebrow="Alerta de seguridad",
+        title="Solicitud de cambio de correo",
+        intro_lines=[
+            f"Hola {account_name}, registramos una solicitud para cambiar el correo de tu cuenta.",
+            "Este mensaje se envia al correo anterior para que puedas detectar cambios no autorizados.",
+        ],
+        details=[
+            ("Correo anterior", previous_email),
+            ("Correo nuevo solicitado", new_email),
+            ("Fecha y hora", event_time),
+        ],
+        footer_lines=[
+            "Si reconoces esta solicitud, completa la verificacion desde el nuevo correo.",
+            "Si no autorizaste el cambio, contactanos inmediatamente para proteger tu cuenta.",
+        ],
+        badge="Revision recomendada",
     )
     send_email(to_email, subject, text, html_body)

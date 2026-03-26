@@ -136,6 +136,8 @@ def prepare_pending_appointment_data(
             status_code=422,
             detail=f"La reserva debe realizarse con al menos {settings.RESERVATION_MIN_LEAD_HOURS} horas de anticipacion",
         )
+    if not client_phone or not client_phone.isdigit() or len(client_phone) != 10:
+        raise HTTPException(status_code=422, detail="Debes registrar un telefono valido de 10 digitos para reservar")
 
     deposit_amount = compute_deposit_amount(service.price)
     total_price = Decimal(str(service.price))

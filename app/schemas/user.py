@@ -16,6 +16,8 @@ def _validate_digits_phone(value: str | None) -> str | None:
         return None
     if not clean.isdigit():
         raise ValueError("El telefono solo permite numeros.")
+    if len(clean) != 10:
+        raise ValueError("El telefono debe tener exactamente 10 digitos.")
     return clean
 
 
