@@ -9,6 +9,7 @@ class Professional(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    canonical_name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     specialty: Mapped[str] = mapped_column(String(255), nullable=False)
     schedule_start: Mapped[str] = mapped_column(String(10), nullable=False)
     schedule_end: Mapped[str] = mapped_column(String(10), nullable=False)

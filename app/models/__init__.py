@@ -5,3 +5,4 @@ from app.models.appointment import Appointment, AppointmentStatusLog, Appointmen
 from app.models.company import CompanyData
 from app.models.token import RefreshToken, PasswordResetToken, EmailVerificationToken
 from app.models.audit import AuditLog, AccountCancellationRequest, ChatbotConversation, ChatbotMessage
+from app.models.settlement import ServiceSettlement, SettlementPayment, SettlementReceipt

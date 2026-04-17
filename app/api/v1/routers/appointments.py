@@ -57,6 +57,7 @@ from app.services.reservation_workflow import (
     process_mock_payment_result,
     reschedule_appointment,
 )
+from app.services.settlement_workflow import ensure_settlement_for_appointment
 from app.crud.appointment import create_appointment
 
 router = APIRouter()
@@ -525,6 +526,9 @@ def confirm(appointment_id: int, payload: AppointmentNotes | None = None, db: Se
         raise HTTPException(status_code=404, detail="Appointment not found")
     if appointment.payment_status != "approved":
         raise HTTPException(status_code=409, detail="La reserva solo puede confirmarse tras pago aprobado")
+    service = get_service(db, appointment.service_id)
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
 
     previous_status = appointment.status
     updates: dict = {"status": "confirmed"}
@@ -540,6 +544,7 @@ def confirm(appointment_id: int, payload: AppointmentNotes | None = None, db: Se
         reason="Confirmacion manual de administrador",
         actor_type="admin",
     )
+    ensure_settlement_for_appointment(db, appointment, service)
     db.commit()
     db.refresh(appointment)
     return appointment

@@ -3,6 +3,7 @@
 from sqlalchemy import select
 
 from app.core.security import get_password_hash
+from app.core.text import canonical_text
 from app.db.session import SessionLocal
 from app.models import CompanyData, Professional, Service, User
 
@@ -58,29 +59,29 @@ def seed_data(db):
     services_seed = [
         {"name": "Masaje Relajante", "category": "Masajes", "duration": 60, "price": 120000, "active": True, "image": None},
         {"name": "Masaje Descontracturante", "category": "Masajes", "duration": 90, "price": 160000, "active": True, "image": None},
-        {"name": "Manicure Clasico", "category": "Manicure", "duration": 45, "price": 35000, "active": True, "image": None},
+        {"name": "Manicure Clásico", "category": "Manicure", "duration": 45, "price": 35000, "active": True, "image": None},
         {"name": "Pedicure Spa", "category": "Pedicure", "duration": 60, "price": 55000, "active": True, "image": None},
-        {"name": "Depilacion Piernas", "category": "Depilacion", "duration": 45, "price": 70000, "active": True, "image": None},
+        {"name": "Depilación Piernas", "category": "Depilación", "duration": 45, "price": 70000, "active": True, "image": None},
         {"name": "Facial Hidratante", "category": "Facial", "duration": 60, "price": 95000, "active": True, "image": None},
     ]
 
     for s in services_seed:
-        existing = db.scalar(select(Service).where(Service.name == s["name"]))
+        existing = db.scalar(select(Service).where(Service.canonical_name == canonical_text(s["name"])))
         if existing:
             continue
-        db.add(Service(**s))
+        db.add(Service(**s, canonical_name=canonical_text(s["name"])))
 
     professionals_seed = [
         {"name": "Valentina Torres", "specialty": "Masajes y Facial", "schedule_start": "08:00", "schedule_end": "17:00", "active": True},
         {"name": "Camila Ruiz", "specialty": "Manicure y Pedicure", "schedule_start": "09:00", "schedule_end": "18:00", "active": True},
-        {"name": "Laura Gomez", "specialty": "Depilacion", "schedule_start": "10:00", "schedule_end": "19:00", "active": True},
+        {"name": "Laura Gómez", "specialty": "Depilación", "schedule_start": "10:00", "schedule_end": "19:00", "active": True},
     ]
 
     for p in professionals_seed:
-        existing = db.scalar(select(Professional).where(Professional.name == p["name"]))
+        existing = db.scalar(select(Professional).where(Professional.canonical_name == canonical_text(p["name"])))
         if existing:
             continue
-        db.add(Professional(**p))
+        db.add(Professional(**p, canonical_name=canonical_text(p["name"])))
 
     company = db.scalar(select(CompanyData).limit(1))
     if not company:

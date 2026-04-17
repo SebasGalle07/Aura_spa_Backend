@@ -51,6 +51,7 @@ from app.monitoring.metrics import (
     observe_payment_event,
 )
 from app.services.payment_gateway import ensure_payu_checkout_configured, ensure_wompi_checkout_configured
+from app.services.settlement_workflow import ensure_settlement_for_appointment
 
 
 def _to_minutes(time_str: str) -> int:
@@ -287,6 +288,10 @@ def apply_payment_webhook(
                 metadata_json={"payment_reference": payment.provider_reference},
             )
             add_history(appointment, "Pago aprobado. Reserva confirmada")
+            service = db.get(Service, appointment.service_id)
+            if not service:
+                raise HTTPException(status_code=404, detail="Servicio asociado a la reserva no encontrado")
+            ensure_settlement_for_appointment(db, appointment, service)
             observe_appointment_event("confirmed", APPOINTMENT_CONFIRMED)
             observe_appointment_transition(previous_status, APPOINTMENT_CONFIRMED)
             return appointment

@@ -92,7 +92,11 @@ class AppointmentOut(BaseSchema):
     @field_validator("status", mode="before")
     @classmethod
     def normalize_status(cls, value: str) -> str:
-        return "completed" if value == "attended" else value
+        legacy_statuses = {
+            "attended": "completed",
+            "pending": "pending_payment",
+        }
+        return legacy_statuses.get(value, value)
 
 
 class AppointmentReschedule(BaseSchema):

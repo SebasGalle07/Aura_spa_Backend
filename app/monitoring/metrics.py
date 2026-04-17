@@ -41,6 +41,16 @@ PAYMENT_EVENTS_TOTAL = Counter(
     "Eventos de pagos procesados por proveedor y estado.",
     ("provider", "status"),
 )
+SETTLEMENT_EVENTS_TOTAL = Counter(
+    "aura_spa_settlement_events_total",
+    "Eventos del proceso de liquidacion de servicios.",
+    ("event", "status"),
+)
+SETTLEMENT_PAYMENTS_TOTAL = Counter(
+    "aura_spa_settlement_payments_total",
+    "Pagos finales registrados en liquidaciones.",
+    ("method",),
+)
 
 
 def _label_status(value: str | None) -> str:
@@ -103,3 +113,11 @@ def observe_payment_event(provider: str | None, status: str) -> None:
         provider=(provider or "unknown").strip().lower(),
         status=_label_status(status),
     ).inc()
+
+
+def observe_settlement_event(event: str, status: str) -> None:
+    SETTLEMENT_EVENTS_TOTAL.labels(event=event, status=_label_status(status)).inc()
+
+
+def observe_settlement_payment(method: str | None) -> None:
+    SETTLEMENT_PAYMENTS_TOTAL.labels(method=(method or "unknown").strip().lower()).inc()

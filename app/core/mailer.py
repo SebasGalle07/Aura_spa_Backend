@@ -311,6 +311,65 @@ def send_appointment_confirmation_email(
     send_email(to_email, subject, text, html_body)
 
 
+def send_settlement_receipt_email(
+    to_email: str,
+    client_name: str,
+    receipt_number: str,
+    service_name: str,
+    professional_name: str,
+    appointment_date: str,
+    appointment_time: str,
+    total_amount: str,
+    deposit_amount: str,
+    paid_amount: str,
+    balance_amount: str,
+    issued_at: datetime,
+) -> None:
+    subject = f"Aura Spa - Comprobante interno {receipt_number}"
+    issued_label = issued_at.strftime("%Y-%m-%d %H:%M")
+    text = (
+        f"Hola {client_name},\n\n"
+        "Tu servicio fue liquidado y se genero el comprobante interno de pago.\n\n"
+        f"Comprobante: {receipt_number}\n"
+        f"Servicio: {service_name}\n"
+        f"Profesional: {professional_name}\n"
+        f"Fecha de cita: {appointment_date} {appointment_time}\n"
+        f"Total: {total_amount}\n"
+        f"Anticipo: {deposit_amount}\n"
+        f"Total pagado: {paid_amount}\n"
+        f"Saldo pendiente: {balance_amount}\n"
+        f"Fecha de emision: {issued_label}\n\n"
+        "Este comprobante es interno y no reemplaza una factura electronica legal."
+    )
+    html_body = _build_email_layout(
+        preheader=f"Comprobante interno {receipt_number} emitido por Aura Spa.",
+        eyebrow="Comprobante interno",
+        title="Tu comprobante de servicio",
+        intro_lines=[
+            f"Hola {client_name}, tu servicio fue liquidado correctamente.",
+            "Adjuntamos el resumen interno del pago registrado en Aura Spa.",
+        ],
+        details=[
+            ("Comprobante", receipt_number),
+            ("Servicio", service_name),
+            ("Profesional", professional_name),
+            ("Fecha de cita", f"{appointment_date} {appointment_time}"),
+            ("Total del servicio", total_amount),
+            ("Anticipo pagado", deposit_amount),
+            ("Total pagado", paid_amount),
+            ("Saldo pendiente", balance_amount),
+            ("Fecha de emision", issued_label),
+        ],
+        footer_lines=[
+            "Este documento es un comprobante interno de servicio.",
+            "No corresponde a factura electronica DIAN ni reemplaza obligaciones tributarias legales.",
+        ],
+        badge="Liquidado",
+        tone="success",
+    )
+    send_email(to_email, subject, text, html_body)
+
+
 def send_email_change_alert_email(
     to_email: str,
     account_name: str,

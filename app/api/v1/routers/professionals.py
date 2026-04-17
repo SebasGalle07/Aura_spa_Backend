@@ -36,7 +36,10 @@ def get_one(professional_id: int, db: Session = Depends(get_db)):
 
 @router.post("", response_model=ProfessionalOut, dependencies=[Depends(require_roles("admin"))])
 def create_one(professional_in: ProfessionalCreate, db: Session = Depends(get_db)):
-    return create_professional(db, professional_in)
+    try:
+        return create_professional(db, professional_in)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.put("/{professional_id}", response_model=ProfessionalOut, dependencies=[Depends(require_roles("admin"))])
@@ -44,4 +47,7 @@ def update_one(professional_id: int, professional_in: ProfessionalUpdate, db: Se
     pro = get_professional(db, professional_id)
     if not pro:
         raise HTTPException(status_code=404, detail="Professional not found")
-    return update_professional(db, pro, professional_in)
+    try:
+        return update_professional(db, pro, professional_in)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

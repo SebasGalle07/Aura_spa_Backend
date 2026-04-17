@@ -68,6 +68,7 @@ uvicorn app.main:app --reload
 - El seeder es idempotente y toma los mismos datos iniciales que el frontend (servicios, profesionales y usuarios).
 - CORS acepta `BACKEND_CORS_ORIGINS` y adicionalmente agrega `FRONTEND_APP_URL` automaticamente.
 - Las imagenes de servicios se guardan en `MEDIA_ROOT` y se sirven en `MEDIA_URL` (por defecto `/media/services/...`).
+- Cuando una reserva pasa a `confirmed` por pago aprobado, el backend crea una liquidacion pendiente para registrar el saldo final y emitir comprobante interno.
 
 ## Endpoints principales
 Base URL: `http://localhost:8000/api/v1`
@@ -112,6 +113,14 @@ Base URL: `http://localhost:8000/api/v1`
 - `POST /appointments/{id}/attend` (admin o professional, marca completada)
 - `POST /appointments/{id}/reschedule` (cliente/admin, requiere pago y >=48h)
 - `POST /appointments/expire-pending` (admin, ejecucion manual de expiracion)
+
+**Settlements**
+- `GET /settlements` (admin)
+- `GET /settlements/my` (cliente)
+- `GET /settlements/{id}` (cliente dueño o admin)
+- `POST /settlements/{id}/payments` (admin, registra pago de saldo)
+- `POST /settlements/{id}/issue-receipt` (admin, emite comprobante interno)
+- `GET /settlements/{id}/receipt` (cliente dueño o admin)
 
 **Admin**
 - `GET /admin/summary?date=YYYY-MM-DD`

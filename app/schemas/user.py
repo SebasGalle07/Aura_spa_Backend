@@ -41,7 +41,7 @@ class UserBase(BaseSchema):
     email_verified: bool = True
     is_active: bool = True
     deactivated_at: datetime | None = None
-    created_at: str | None = None
+    created_at: datetime | None = None
 
 
 class UserCreate(BaseSchema):
@@ -115,7 +115,7 @@ class UserOut(BaseSchema):
     email_verified: bool = True
     is_active: bool = True
     deactivated_at: datetime | None = None
-    created_at: str | None = None
+    created_at: datetime | None = None
 
 
 class PasswordChange(BaseSchema):

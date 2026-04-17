@@ -11,6 +11,7 @@ from app.api.v1.routers import (
     company,
     professionals,
     services,
+    settlements,
     users,
 )
 
@@ -20,6 +21,7 @@ api_router.include_router(services.router, prefix="/services", tags=["services"]
 api_router.include_router(professionals.router, prefix="/professionals", tags=["professionals"])
 api_router.include_router(availability.router, prefix="/availability", tags=["availability"])
 api_router.include_router(appointments.router, prefix="/appointments", tags=["appointments"])
+api_router.include_router(settlements.router, prefix="/settlements", tags=["settlements"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(audit.router, prefix="/audit-logs", tags=["audit"])

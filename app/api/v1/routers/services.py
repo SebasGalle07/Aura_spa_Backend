@@ -25,7 +25,10 @@ def get_one(service_id: int, db: Session = Depends(get_db)):
 
 @router.post('', response_model=ServiceOut, dependencies=[Depends(require_roles('admin'))])
 def create_one(service_in: ServiceCreate, db: Session = Depends(get_db)):
-    return create_service(db, service_in)
+    try:
+        return create_service(db, service_in)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.put('/{service_id}', response_model=ServiceOut, dependencies=[Depends(require_roles('admin'))])
@@ -33,7 +36,10 @@ def update_one(service_id: int, service_in: ServiceUpdate, db: Session = Depends
     svc = get_service(db, service_id)
     if not svc:
         raise HTTPException(status_code=404, detail='Service not found')
-    return update_service(db, svc, service_in)
+    try:
+        return update_service(db, svc, service_in)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.delete('/{service_id}', dependencies=[Depends(require_roles('admin'))])
