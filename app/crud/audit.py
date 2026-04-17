@@ -80,7 +80,7 @@ def get_open_account_cancellation_request(db: Session, user_id: int) -> AccountC
         select(AccountCancellationRequest)
         .where(
             AccountCancellationRequest.user_id == user_id,
-            AccountCancellationRequest.status.in_(["pending", "reviewed"]),
+            AccountCancellationRequest.status.in_(["pending", "reviewed", "approved"]),
         )
         .order_by(desc(AccountCancellationRequest.created_at))
         .limit(1)
