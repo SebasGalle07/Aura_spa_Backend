@@ -23,7 +23,9 @@ Servicios:
 Credenciales iniciales de Grafana:
 
 - usuario: `admin`
-- clave: `admin`
+- clave: valor de `GRAFANA_ADMIN_PASSWORD`; si no lo defines localmente, usa `AuraSpa2026!`
+
+Prometheus consulta `/metrics` con token Bearer. El backend debe tener configurado el mismo valor en `METRICS_TOKEN`.
 
 ## Targets configurados
 

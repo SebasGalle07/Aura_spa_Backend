@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.mailer import send_email_verification_email
 from app.core.security import create_email_verification_token, decode_token, hash_token
+from app.core.time import utc_from_timestamp
 from app.crud.token import store_email_verification_token
 
 
@@ -15,7 +16,7 @@ def _expiry_datetime_from_token(token: str) -> datetime:
     exp = payload.get("exp")
     if exp is None:
         raise HTTPException(status_code=500, detail="Token sin expiracion")
-    return datetime.utcfromtimestamp(exp)
+    return utc_from_timestamp(exp)
 
 
 def build_verify_email_link(token: str) -> str:

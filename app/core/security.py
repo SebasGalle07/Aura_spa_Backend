@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from hashlib import sha256
 import re
 from typing import Iterable
@@ -11,12 +11,14 @@ from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.time import utc_now
 from app.db.deps import get_db
 from app.models.user import User
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
+optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login", auto_error=False)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -52,7 +54,7 @@ def _hash_token(token: str) -> str:
 
 
 def _create_token(subject: str, token_type: str, expires_delta: timedelta) -> str:
-    now = datetime.utcnow()
+    now = utc_now()
     expire = now + expires_delta
     to_encode = {
         "exp": expire,
@@ -105,9 +107,38 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    user = db.get(User, int(user_id))
+    try:
+        parsed_user_id = int(user_id)
+    except (TypeError, ValueError):
+        raise credentials_exception
+    user = db.get(User, parsed_user_id)
     if user is None:
         raise credentials_exception
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="La cuenta se encuentra desactivada")
+    return user
+
+
+def get_optional_user(db: Session = Depends(get_db), token: str | None = Depends(optional_oauth2_scheme)):
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        token_type = payload.get("type")
+        user_id = payload.get("sub")
+        if token_type and token_type != "access":
+            return None
+        if user_id is None:
+            return None
+    except JWTError:
+        return None
+    try:
+        parsed_user_id = int(user_id)
+    except (TypeError, ValueError):
+        return None
+    user = db.get(User, parsed_user_id)
+    if user is None or not user.is_active:
+        return None
     return user
 
 

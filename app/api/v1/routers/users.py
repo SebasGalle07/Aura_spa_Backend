@@ -1,13 +1,13 @@
-﻿from datetime import datetime
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.mailer import send_email_change_alert_email
 from app.core.security import require_roles, get_current_user, verify_password, get_password_hash, validate_password_security
+from app.core.time import utc_now
 from app.db.deps import get_db
 from app.crud.user import get_user_by_id, get_user_by_email, create_user, update_user
+from app.crud.audit import create_audit_log
 from app.models.user import User
 from app.schemas.user import UserOut, UserCreate, UserUpdate, PasswordChange
 from app.services.email_verification import ensure_verification_email_available, send_verification_email_or_raise
@@ -39,9 +39,18 @@ def update_me(payload: UserUpdate, db: Session = Depends(get_db), current_user=D
                 current_user.name,
                 previous_email,
                 data["email"],
-                requested_at=datetime.utcnow(),
+                requested_at=utc_now(),
             )
     updated = update_user(db, current_user, UserUpdate(**data))
+    create_audit_log(
+        db,
+        action="user_profile_updated",
+        entity_type="user",
+        entity_id=updated.id,
+        actor=updated,
+        old_value={"email": previous_email},
+        new_value={key: value for key, value in data.items() if key != "password"},
+    )
     if "email_verified" in data:
         send_verification_email_or_raise(db, updated)
     return updated
@@ -56,6 +65,13 @@ def change_password(payload: PasswordChange, db: Session = Depends(get_db), curr
     db.add(current_user)
     db.commit()
     db.refresh(current_user)
+    create_audit_log(
+        db,
+        action="user_password_changed",
+        entity_type="user",
+        entity_id=current_user.id,
+        actor=current_user,
+    )
     return current_user
 
 
@@ -64,12 +80,21 @@ def list_users(db: Session = Depends(get_db)):
     return list(db.scalars(select(User)).all())
 
 
-@router.post("", response_model=UserOut, dependencies=[Depends(require_roles("admin"))])
-def create_user_admin(payload: UserCreate, db: Session = Depends(get_db)):
+@router.post("", response_model=UserOut)
+def create_user_admin(payload: UserCreate, db: Session = Depends(get_db), current_user=Depends(require_roles("admin"))):
     if get_user_by_email(db, payload.email):
         raise HTTPException(status_code=400, detail="Email already registered")
     validate_password_security(payload.password)
-    return create_user(db, payload, role=payload.role)
+    user = create_user(db, payload, role=payload.role)
+    create_audit_log(
+        db,
+        action="admin_user_created",
+        entity_type="user",
+        entity_id=user.id,
+        actor=current_user,
+        new_value={"email": user.email, "role": user.role},
+    )
+    return user
 
 
 @router.put("/{user_id}", response_model=UserOut, dependencies=[Depends(require_roles("admin"))])
@@ -91,12 +116,21 @@ def update_user_admin(user_id: int, payload: UserUpdate, db: Session = Depends(g
                 user.name,
                 original_email,
                 payload.email,
-                requested_at=datetime.utcnow(),
+                requested_at=utc_now(),
             )
             payload = UserUpdate(**(payload.model_dump(exclude_unset=True, by_alias=False) | {"email_verified": False}))
     if payload.password:
         validate_password_security(payload.password)
     updated = update_user(db, user, payload)
+    create_audit_log(
+        db,
+        action="admin_user_updated",
+        entity_type="user",
+        entity_id=updated.id,
+        actor=current_user,
+        old_value={"email": original_email},
+        new_value=payload.model_dump(exclude_unset=True, by_alias=False, exclude={"password"}),
+    )
     if payload.email and payload.email != original_email:
         send_verification_email_or_raise(db, updated)
     return updated

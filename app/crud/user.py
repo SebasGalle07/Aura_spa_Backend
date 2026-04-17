@@ -1,9 +1,8 @@
-from datetime import date
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.security import get_password_hash, verify_password
+from app.core.time import utc_now
 from app.models.user import User
 from app.schemas.user import UserCreate, UserRegister, UserUpdate
 
@@ -29,7 +28,7 @@ def create_user(
         name=user_in.name,
         phone=getattr(user_in, "phone", None),
         email_verified=email_verified,
-        created_at=date.today().isoformat(),
+        created_at=utc_now(),
     )
     db.add(user)
     db.commit()

@@ -4,6 +4,7 @@ from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
+from app.core.time import utc_now
 from app.db.base import Base
 
 
@@ -32,9 +33,9 @@ class Appointment(Base):
     payment_reference: Mapped[str | None] = mapped_column(String(120), nullable=True)
     payment_transaction_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     payment_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=False), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime(timezone=False), nullable=False, default=utc_now, onupdate=utc_now
     )
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
     notes: Mapped[str] = mapped_column(String, nullable=False, default="")
@@ -68,7 +69,7 @@ class AppointmentStatusLog(Base):
     actor_type: Mapped[str] = mapped_column(String(32), nullable=False, default="system")
     actor_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utc_now)
 
     appointment: Mapped["Appointment"] = relationship("Appointment", back_populates="status_logs")
 
@@ -85,7 +86,7 @@ class AppointmentReschedule(Base):
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     actor_type: Mapped[str] = mapped_column(String(32), nullable=False, default="system")
     actor_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utc_now)
 
     appointment: Mapped["Appointment"] = relationship("Appointment", back_populates="reschedules")
 
@@ -104,9 +105,9 @@ class Payment(Base):
     provider_tx_id: Mapped[str | None] = mapped_column(String(120), nullable=True, unique=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=False), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime(timezone=False), nullable=False, default=utc_now, onupdate=utc_now
     )
 
     appointment: Mapped["Appointment"] = relationship("Appointment", back_populates="payments")

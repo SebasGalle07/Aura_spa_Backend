@@ -3,7 +3,7 @@ import logging
 import secrets
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2 import id_token as google_id_token
 from jose import JWTError
@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.mailer import send_password_reset_email
+from app.core.rate_limit import limiter
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -21,6 +22,7 @@ from app.core.security import (
     hash_token,
     validate_password_security,
 )
+from app.core.time import utc_from_timestamp, utc_now
 from app.crud.token import (
     get_email_verification_token,
     get_recent_email_verification_token,
@@ -31,6 +33,7 @@ from app.crud.token import (
     store_reset_token,
 )
 from app.crud.user import authenticate_user, create_user, get_user_by_email, get_user_by_id
+from app.crud.audit import create_audit_log
 from app.db.deps import get_db
 from app.schemas.auth import (
     ForgotPasswordRequest,
@@ -58,7 +61,7 @@ def _expiry_datetime_from_token(token: str) -> datetime:
     exp = payload.get('exp')
     if exp is None:
         raise HTTPException(status_code=500, detail='Token sin expiracion')
-    return datetime.utcfromtimestamp(exp)
+    return utc_from_timestamp(exp)
 
 
 def _issue_session_tokens(db: Session, user) -> dict:
@@ -107,7 +110,7 @@ def _verify_google_id_token(id_token: str) -> dict:
 
 
 @router.post('/register', response_model=RegisterResponse)
-def register(user_in: UserRegister, db: Session = Depends(get_db)):
+def register(user_in: UserRegister, request: Request, db: Session = Depends(get_db)):
     validate_password_security(user_in.password)
     if not settings.smtp_enabled:
         raise HTTPException(status_code=503, detail='Registro temporalmente no disponible')
@@ -128,6 +131,16 @@ def register(user_in: UserRegister, db: Session = Depends(get_db)):
         db.delete(user)
         db.commit()
         raise
+    create_audit_log(
+        db,
+        action="user_registered",
+        entity_type="user",
+        entity_id=user.id,
+        actor=user,
+        new_value={"email": user.email},
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
     return {'ok': True, 'email_verification_required': True}
 
 
@@ -142,7 +155,7 @@ def resend_verification(payload: ResendVerificationRequest, db: Session = Depend
 
     recent_token = get_recent_email_verification_token(db, user.id)
     if recent_token:
-        elapsed = (datetime.utcnow() - recent_token.created_at).total_seconds()
+        elapsed = (utc_now() - recent_token.created_at).total_seconds()
         if elapsed < settings.VERIFY_EMAIL_RESEND_SECONDS:
             return {'ok': True}
 
@@ -163,7 +176,7 @@ def verify_email(payload: VerifyEmailRequest, db: Session = Depends(get_db)):
 
     token_hash = hash_token(payload.token)
     token_row = get_email_verification_token(db, token_hash)
-    if not token_row or token_row.used or token_row.expires_at <= datetime.utcnow():
+    if not token_row or token_row.used or token_row.expires_at <= utc_now():
         raise invalid_token_error
 
     user_id = token_payload.get('sub')
@@ -185,12 +198,36 @@ def verify_email(payload: VerifyEmailRequest, db: Session = Depends(get_db)):
 
 
 @router.post('/login', response_model=Token)
-def login(data: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
     user = authenticate_user(db, data.email, data.password)
     if not user:
         observe_auth_attempt("password", "failed")
+        create_audit_log(
+            db,
+            action="login_failed",
+            entity_type="user",
+            entity_id=data.email,
+            new_value={"method": "password"},
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
         logger.warning('Login fallido para email=%s', data.email)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Correo o contrasena incorrectos')
+
+    if not user.is_active:
+        observe_auth_attempt("password", "blocked_inactive")
+        create_audit_log(
+            db,
+            action="login_blocked_inactive",
+            entity_type="user",
+            entity_id=user.id,
+            actor=user,
+            new_value={"method": "password"},
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="La cuenta se encuentra desactivada")
 
     if not user.email_verified:
         observe_auth_attempt("password", "blocked_unverified")
@@ -201,12 +238,22 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
         )
 
     observe_auth_attempt("password", "success")
+    create_audit_log(
+        db,
+        action="login_success",
+        entity_type="user",
+        entity_id=user.id,
+        actor=user,
+        new_value={"method": "password"},
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
     logger.info('Login exitoso: id=%s email=%s', user.id, user.email)
     return _issue_session_tokens(db, user)
 
 
 @router.post('/google', response_model=Token)
-def login_google(payload: GoogleLoginRequest, db: Session = Depends(get_db)):
+def login_google(payload: GoogleLoginRequest, request: Request, db: Session = Depends(get_db)):
     token_data = _verify_google_id_token(payload.id_token)
     email = (token_data.get('email') or '').strip().lower()
     if not email:
@@ -227,6 +274,19 @@ def login_google(payload: GoogleLoginRequest, db: Session = Depends(get_db)):
         )
         user = create_user(db, google_user, role='client', email_verified=True)
         logger.info('Usuario creado por login Google: id=%s email=%s', user.id, user.email)
+    elif not user.is_active:
+        observe_auth_attempt("google", "blocked_inactive")
+        create_audit_log(
+            db,
+            action="login_blocked_inactive",
+            entity_type="user",
+            entity_id=user.id,
+            actor=user,
+            new_value={"method": "google"},
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="La cuenta se encuentra desactivada")
     elif not user.email_verified:
         user.email_verified = True
         db.add(user)
@@ -234,6 +294,16 @@ def login_google(payload: GoogleLoginRequest, db: Session = Depends(get_db)):
         db.refresh(user)
 
     observe_auth_attempt("google", "success")
+    create_audit_log(
+        db,
+        action="login_success",
+        entity_type="user",
+        entity_id=user.id,
+        actor=user,
+        new_value={"method": "google"},
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
     logger.info('Login Google exitoso: id=%s email=%s', user.id, user.email)
     return _issue_session_tokens(db, user)
 
@@ -257,7 +327,7 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
     if not stored_token or stored_token.revoked:
         logger.warning('Refresh rechazado: token inexistente o revocado')
         raise credentials_exception
-    if stored_token.expires_at <= datetime.utcnow():
+    if stored_token.expires_at <= utc_now():
         logger.warning('Refresh rechazado: token expirado')
         raise credentials_exception
 
@@ -270,6 +340,9 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
     if user is None:
         logger.warning('Refresh rechazado: usuario no encontrado')
         raise credentials_exception
+    if not user.is_active:
+        logger.warning('Refresh rechazado: cuenta desactivada para user_id=%s', user.id)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='La cuenta se encuentra desactivada')
     if not user.email_verified:
         logger.warning('Refresh rechazado: correo no verificado para user_id=%s', user.id)
         raise HTTPException(
@@ -335,7 +408,7 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db))
 
     token_hash = hash_token(payload.token)
     token_row = get_reset_token(db, token_hash)
-    if not token_row or token_row.used or token_row.expires_at <= datetime.utcnow():
+    if not token_row or token_row.used or token_row.expires_at <= utc_now():
         raise invalid_token_error
 
     user_id = token_payload.get('sub')

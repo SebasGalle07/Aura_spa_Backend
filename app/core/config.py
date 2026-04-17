@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = 'Aura Spa Backend'
     API_V1_STR: str = '/api/v1'
 
-    SECRET_KEY: str = 'CHANGE_ME'
+    SECRET_KEY: str
     ALGORITHM: str = 'HS256'
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     RESERVATION_EXPIRER_ENABLED: bool = True
     PROMETHEUS_ENABLED: bool = True
     METRICS_PATH: str = "/metrics"
+    METRICS_TOKEN: str | None = None
 
     PAYMENT_PROVIDER: str = "mock"
     PAYMENT_WEBHOOK_SECRET: str | None = None
@@ -97,6 +98,10 @@ class Settings(BaseSettings):
                 cleaned.append(candidate)
         self.BACKEND_CORS_ORIGINS = cleaned
         self.GOOGLE_CLIENT_IDS = self._normalize_csv(self.GOOGLE_CLIENT_IDS)
+        secret = self.SECRET_KEY.strip()
+        insecure_values = {"CHANGE_ME", "changeme", "change_me", "replace-with-a-long-random-secret"}
+        if secret in insecure_values or len(secret) < 32:
+            raise ValueError("SECRET_KEY debe configurarse con una clave secreta segura de minimo 32 caracteres")
         return self
 
     @staticmethod

@@ -17,8 +17,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-AuraSpa2026!}
       GF_USERS_ALLOW_SIGN_UP: "false"
       PROMETHEUS_URL: http://prometheus:9090
     volumes:

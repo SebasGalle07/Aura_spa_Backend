@@ -5,6 +5,8 @@ global:
 scrape_configs:
   - job_name: aura-spa-backend-local
     metrics_path: /metrics
+    authorization:
+      credentials: "AuraSpaMetrics2026!"
     static_configs:
       - targets:
           - host.docker.internal:8080
@@ -12,6 +14,8 @@ scrape_configs:
   - job_name: aura-spa-backend-cloud-run
     scheme: https
     metrics_path: /metrics
+    authorization:
+      credentials: "AuraSpaMetrics2026!"
     static_configs:
       - targets:
           - aura-spa-backend-yujwbtz45a-uc.a.run.app

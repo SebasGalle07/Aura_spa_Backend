@@ -1,8 +1,14 @@
-﻿from sqlalchemy import select
+﻿from datetime import datetime, timezone
+
+from sqlalchemy import select
 
 from app.core.security import get_password_hash
 from app.db.session import SessionLocal
 from app.models import CompanyData, Professional, Service, User
+
+
+def _dt(date_str: str) -> datetime:
+    return datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=None)
 
 
 def seed_data(db):
@@ -13,7 +19,7 @@ def seed_data(db):
             "role": "admin",
             "name": "Administrador",
             "phone": "3001112233",
-            "created_at": "2024-01-15",
+            "created_at": _dt("2024-01-15"),
         },
         {
             "email": "cliente@email.com",
@@ -21,7 +27,7 @@ def seed_data(db):
             "role": "client",
             "name": "Cliente Demo",
             "phone": "3009998877",
-            "created_at": "2024-03-20",
+            "created_at": _dt("2024-03-20"),
         },
         {
             "email": "valentina@auraspa.com",
@@ -29,7 +35,7 @@ def seed_data(db):
             "role": "professional",
             "name": "Valentina Torres",
             "phone": "3115556677",
-            "created_at": "2024-02-10",
+            "created_at": _dt("2024-02-10"),
         },
     ]
 

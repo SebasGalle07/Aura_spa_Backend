@@ -17,7 +17,7 @@ pip install -r requirements.txt
 
 ## Variables de entorno
 - `DATABASE_URL` (default: `postgresql+psycopg://postgres:argus@localhost:5432/aura_spa`)
-- `SECRET_KEY` (default: `CHANGE_ME`)
+- `SECRET_KEY` (obligatoria; debe tener minimo 32 caracteres y no puede usar valores de ejemplo)
 - `ACCESS_TOKEN_EXPIRE_MINUTES` (default: `10`)
 - `BACKEND_CORS_ORIGINS` (default: `http://localhost:4200`)
 - `FRONTEND_APP_URL` (default: `http://localhost:4200`)
@@ -35,6 +35,11 @@ pip install -r requirements.txt
 - `AUTO_CREATE_TABLES` (default: `false`)
 
 Puedes crear un `.env` en la raiz con estos valores.
+
+Para generar una `SECRET_KEY` segura:
+```
+python -c "import secrets; print(secrets.token_urlsafe(64))"
+```
 
 Para PostgreSQL local (usuario `postgres`):
 ```

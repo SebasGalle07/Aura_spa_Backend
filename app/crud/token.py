@@ -26,6 +26,15 @@ def revoke_refresh_token(db: Session, token_obj: RefreshToken):
     return token_obj
 
 
+def revoke_user_refresh_tokens(db: Session, user_id: int):
+    tokens = list(db.scalars(select(RefreshToken).where(RefreshToken.user_id == user_id, RefreshToken.revoked == False)).all())  # noqa: E712
+    for token in tokens:
+        token.revoked = True
+        db.add(token)
+    db.commit()
+    return tokens
+
+
 def store_reset_token(db: Session, user_id: int, token_hash: str, expires_at: datetime):
     obj = PasswordResetToken(user_id=user_id, token_hash=token_hash, expires_at=expires_at, used=False)
     db.add(obj)

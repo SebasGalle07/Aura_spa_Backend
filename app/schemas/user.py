@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 from typing import Literal
 
 from pydantic import EmailStr, field_validator
@@ -38,6 +39,8 @@ class UserBase(BaseSchema):
     phone: str | None = None
     role: Role
     email_verified: bool = True
+    is_active: bool = True
+    deactivated_at: datetime | None = None
     created_at: str | None = None
 
 
@@ -90,6 +93,7 @@ class UserUpdate(BaseSchema):
     role: Role | None = None
     password: str | None = None
     email_verified: bool | None = None
+    is_active: bool | None = None
 
     @field_validator("name")
     @classmethod
@@ -109,6 +113,8 @@ class UserOut(BaseSchema):
     phone: str | None = None
     role: Role
     email_verified: bool = True
+    is_active: bool = True
+    deactivated_at: datetime | None = None
     created_at: str | None = None
 
 

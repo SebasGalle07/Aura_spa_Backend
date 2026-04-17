@@ -4,6 +4,7 @@ from email.message import EmailMessage
 from datetime import datetime
 
 from app.core.config import settings
+from app.core.time import utc_now
 
 
 BRAND = {
@@ -317,7 +318,7 @@ def send_email_change_alert_email(
     new_email: str,
     requested_at: datetime | None = None,
 ) -> None:
-    event_time = (requested_at or datetime.utcnow()).strftime("%Y-%m-%d %H:%M UTC")
+    event_time = (requested_at or utc_now()).strftime("%Y-%m-%d %H:%M UTC")
     subject = "Aura Spa - Aviso de cambio de correo"
     text = (
         f"Hola {account_name},\n\n"
@@ -346,5 +347,90 @@ def send_email_change_alert_email(
             "Si no autorizaste el cambio, contactanos inmediatamente para proteger tu cuenta.",
         ],
         badge="Revision recomendada",
+    )
+    send_email(to_email, subject, text, html_body)
+
+
+def send_account_cancellation_notification_email(
+    to_email: str,
+    account_name: str,
+    status: str,
+    admin_response: str | None = None,
+) -> None:
+    status_labels = {
+        "approved": "Aprobada",
+        "rejected": "Rechazada",
+        "reviewed": "Revisada",
+        "pending": "Pendiente",
+    }
+    label = status_labels.get(status, status)
+    response_text = (admin_response or "").strip() or "No se registro una observacion adicional."
+    subject = f"Aura Spa - Solicitud de cancelacion {label.lower()}"
+    text = (
+        f"Hola {account_name},\n\n"
+        "Tu solicitud de cancelacion de inscripcion en Aura Spa fue revisada.\n\n"
+        f"Estado: {label}\n"
+        f"Respuesta: {response_text}\n\n"
+    )
+    if status == "approved":
+        text += "Tu cuenta fue desactivada. Si necesitas soporte, contacta al equipo de Aura Spa."
+    else:
+        text += "Puedes revisar el estado desde tu perfil o contactar al equipo de Aura Spa si necesitas mas informacion."
+
+    html_body = _build_email_layout(
+        preheader="Tu solicitud de cancelacion de cuenta fue revisada por Aura Spa.",
+        eyebrow="Canal de cancelacion",
+        title="Resultado de tu solicitud",
+        intro_lines=[
+            f"Hola {account_name}, revisamos tu solicitud de cancelacion de inscripcion.",
+            "Te compartimos el resultado registrado por el equipo administrador.",
+        ],
+        details=[
+            ("Estado", label),
+            ("Respuesta del equipo", response_text),
+        ],
+        footer_lines=[
+            "Si tienes dudas sobre esta decision, puedes comunicarte con Aura Spa por los canales de contacto publicados.",
+        ],
+        badge=label,
+        tone="success" if status == "approved" else "default",
+    )
+    send_email(to_email, subject, text, html_body)
+
+
+def send_account_cancellation_confirmation_email(
+    to_email: str,
+    account_name: str,
+) -> None:
+    """Correo enviado al cliente cuando cancela su inscripcion de forma inmediata."""
+    subject = "Aura Spa - Tu cuenta ha sido cancelada"
+    text = (
+        f"Hola {account_name},\n\n"
+        "Confirmamos que tu inscripcion en Aura Spa ha sido cancelada exitosamente "
+        "y tu cuenta ha sido desactivada.\n\n"
+        "Ya no podras iniciar sesion con este correo.\n\n"
+        "Si crees que esto fue un error o deseas reactivar tu cuenta, "
+        "comunicate con nuestro equipo a traves de los canales de contacto "
+        "publicados en nuestra plataforma.\n\n"
+        "Gracias por haber sido parte de Aura Spa."
+    )
+    html_body = _build_email_layout(
+        preheader="Tu cuenta de Aura Spa ha sido cancelada exitosamente.",
+        eyebrow="Cancelacion de inscripcion",
+        title="Tu cuenta ha sido cancelada",
+        intro_lines=[
+            f"Hola {account_name}, confirmamos que tu solicitud de cancelacion fue procesada.",
+            "Tu cuenta ha sido desactivada y ya no podras iniciar sesion.",
+        ],
+        details=[
+            ("Estado", "Cancelada"),
+            ("Accion", "Cuenta desactivada"),
+        ],
+        footer_lines=[
+            "Si crees que esto fue un error o deseas reactivar tu cuenta, contacta al equipo de Aura Spa.",
+            "Gracias por haber sido parte de nuestra comunidad.",
+        ],
+        badge="Cancelada",
+        tone="default",
     )
     send_email(to_email, subject, text, html_body)
