@@ -73,6 +73,10 @@ class Settings(BaseSettings):
     SEED_ON_STARTUP: bool = True
     AUTO_CREATE_TABLES: bool = False
 
+    GROQ_API_KEY: str | None = None
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_MAX_TOKENS: int = 400
+
     @field_validator('BACKEND_CORS_ORIGINS', mode='before')
     @classmethod
     def _assemble_cors(cls, v):

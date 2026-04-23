@@ -35,7 +35,13 @@ def send_chatbot_message(
     )
     history = get_chatbot_messages(db, conversation.id)
     add_chatbot_message(db, conversation_id=conversation.id, sender="user", message=message)
-    response = build_contextual_response(db, message, history=history, user=current_user)
+    response = build_contextual_response(
+        db,
+        message,
+        history=history,
+        user=current_user,
+        conversation=conversation,
+    )
     add_chatbot_message(db, conversation_id=conversation.id, sender="bot", message=response)
     create_audit_log(
         db,

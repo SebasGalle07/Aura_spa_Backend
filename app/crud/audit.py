@@ -118,6 +118,19 @@ def update_account_cancellation_request(
     return request
 
 
+def update_conversation_state(
+    db: Session,
+    conversation_id: int,
+    state: dict | None,
+) -> None:
+    conv = db.get(ChatbotConversation, conversation_id)
+    if conv:
+        conv.booking_state = state
+        conv.updated_at = utc_now()
+        db.add(conv)
+        db.commit()
+
+
 def get_or_create_chatbot_conversation(
     db: Session,
     *,

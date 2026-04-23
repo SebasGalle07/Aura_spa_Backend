@@ -43,6 +43,7 @@ class ChatbotConversation(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="open", index=True)
+    booking_state: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
 

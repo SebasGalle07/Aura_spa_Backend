@@ -117,6 +117,25 @@ def register(user_in: UserRegister, request: Request, db: Session = Depends(get_
 
     existing_user = get_user_by_email(db, user_in.email)
     if existing_user:
+        if not existing_user.is_active:
+            existing_user.hashed_password = get_password_hash(user_in.password)
+            existing_user.name = user_in.name
+            existing_user.phone = getattr(user_in, 'phone', None)
+            existing_user.is_active = True
+            existing_user.deactivated_at = None
+            existing_user.email_verified = False
+            db.add(existing_user)
+            db.commit()
+            db.refresh(existing_user)
+            try:
+                send_verification_email_or_raise(db, existing_user)
+            except HTTPException:
+                existing_user.is_active = False
+                db.add(existing_user)
+                db.commit()
+                raise
+            logger.info('Cuenta reactivada para: %s', existing_user.email)
+            return {'ok': True, 'email_verification_required': True}
         if not existing_user.email_verified:
             send_verification_email_or_raise(db, existing_user)
             return {'ok': True, 'email_verification_required': True}
