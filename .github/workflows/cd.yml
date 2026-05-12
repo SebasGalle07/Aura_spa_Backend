@@ -53,7 +53,8 @@ jobs:
         env:
           IMAGE_TAG: backend-${{ github.sha }}
         run: |
-          IMAGE_URI="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/aura-spa-backend:${IMAGE_TAG}"
+          ARTIFACT_REPOSITORY_CLEAN=$(printf '%s' "${ARTIFACT_REPOSITORY}" | xargs)
+          IMAGE_URI="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY_CLEAN}/aura-spa-backend:${IMAGE_TAG}"
           echo "IMAGE_URI=${IMAGE_URI}" >> "$GITHUB_ENV"
           OUTPUT=$(gcloud builds submit --async --format='value(metadata.build.id)' --tag "${IMAGE_URI}" . 2>&1) || {
             echo "${OUTPUT}"
@@ -61,7 +62,12 @@ jobs:
             echo "::error::${ERROR_LINE}"
             exit 1
           }
-          BUILD_ID=$(printf '%s\n' "${OUTPUT}" | tail -n 1 | tr -d '\r')
+          BUILD_ID=$(printf '%s\n' "${OUTPUT}" | sed -n 's|.*builds/\([a-f0-9-]\+\).*|\1|p' | head -n 1)
+          if [ -z "${BUILD_ID}" ]; then
+            echo "${OUTPUT}"
+            echo "::error::No se pudo extraer BUILD_ID de Cloud Build"
+            exit 1
+          fi
           echo "BUILD_ID=${BUILD_ID}" >> "$GITHUB_ENV"
 
       - name: Wait for Cloud Build
