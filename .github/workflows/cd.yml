@@ -55,10 +55,7 @@ jobs:
         run: |
           IMAGE_URI="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/aura-spa-backend:${IMAGE_TAG}"
           echo "IMAGE_URI=${IMAGE_URI}" >> "$GITHUB_ENV"
-          docker build -t "${IMAGE_URI}" .
-
-      - name: Push Docker image
-        run: docker push "${IMAGE_URI}"
+          gcloud builds submit --tag "${IMAGE_URI}" .
 
       - name: Update migration job
         run: |
