@@ -56,3 +56,21 @@ class ChatbotMessage(Base):
     sender: Mapped[str] = mapped_column(String(32), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now, index=True)
+
+
+class ServiceCase(Base):
+    __tablename__ = "service_cases"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    appointment_id: Mapped[int] = mapped_column(ForeignKey("appointments.id"), nullable=False, index=True)
+    client_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    case_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    subject: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="open", index=True)
+    admin_response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)

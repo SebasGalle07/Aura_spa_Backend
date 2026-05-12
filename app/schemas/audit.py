@@ -5,6 +5,8 @@ from app.schemas.common import BaseSchema
 
 
 CancellationStatus = Literal["pending", "reviewed", "approved", "rejected"]
+ServiceCaseType = Literal["petition", "complaint", "claim", "suggestion"]
+ServiceCaseStatus = Literal["open", "in_review", "resolved", "closed", "rejected"]
 
 
 class AuditLogOut(BaseSchema):
@@ -50,3 +52,31 @@ class ChatbotMessageRequest(BaseSchema):
 class ChatbotMessageResponse(BaseSchema):
     conversation_id: int
     response: str
+
+
+class ServiceCaseCreate(BaseSchema):
+    appointment_id: int
+    case_type: ServiceCaseType
+    subject: str
+    description: str
+
+
+class ServiceCaseUpdate(BaseSchema):
+    status: ServiceCaseStatus
+    admin_response: str | None = None
+
+
+class ServiceCaseOut(BaseSchema):
+    id: int
+    appointment_id: int
+    client_user_id: int
+    case_type: ServiceCaseType
+    subject: str
+    description: str
+    status: ServiceCaseStatus
+    admin_response: str | None = None
+    reviewed_by_user_id: int | None = None
+    reviewed_at: datetime | None = None
+    closed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime

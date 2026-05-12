@@ -7,6 +7,7 @@ from app.models.audit import (
     AuditLog,
     ChatbotConversation,
     ChatbotMessage,
+    ServiceCase,
 )
 from app.models.user import User
 
@@ -116,6 +117,95 @@ def update_account_cancellation_request(
     db.commit()
     db.refresh(request)
     return request
+
+
+def create_service_case(
+    db: Session,
+    *,
+    appointment_id: int,
+    client_user_id: int,
+    case_type: str,
+    subject: str,
+    description: str,
+    status: str = "open",
+) -> ServiceCase:
+    service_case = ServiceCase(
+        appointment_id=appointment_id,
+        client_user_id=client_user_id,
+        case_type=case_type,
+        subject=subject.strip(),
+        description=description.strip(),
+        status=status,
+    )
+    db.add(service_case)
+    db.commit()
+    db.refresh(service_case)
+    return service_case
+
+
+def list_service_cases(
+    db: Session,
+    *,
+    status: str | None = None,
+    case_type: str | None = None,
+) -> list[ServiceCase]:
+    stmt = select(ServiceCase).order_by(desc(ServiceCase.created_at))
+    if status:
+        stmt = stmt.where(ServiceCase.status == status)
+    if case_type:
+        stmt = stmt.where(ServiceCase.case_type == case_type)
+    return list(db.scalars(stmt).all())
+
+
+def list_service_cases_by_client(db: Session, client_user_id: int) -> list[ServiceCase]:
+    stmt = (
+        select(ServiceCase)
+        .where(ServiceCase.client_user_id == client_user_id)
+        .order_by(desc(ServiceCase.created_at))
+    )
+    return list(db.scalars(stmt).all())
+
+
+def get_service_case(db: Session, case_id: int) -> ServiceCase | None:
+    return db.get(ServiceCase, case_id)
+
+
+def get_open_service_case_by_appointment_for_client(
+    db: Session,
+    *,
+    appointment_id: int,
+    client_user_id: int,
+) -> ServiceCase | None:
+    return db.scalar(
+        select(ServiceCase)
+        .where(
+            ServiceCase.appointment_id == appointment_id,
+            ServiceCase.client_user_id == client_user_id,
+            ServiceCase.status.in_(["open", "in_review"]),
+        )
+        .order_by(desc(ServiceCase.created_at))
+        .limit(1)
+    )
+
+
+def update_service_case(
+    db: Session,
+    service_case: ServiceCase,
+    *,
+    status: str,
+    admin_response: str | None,
+    reviewed_by_user_id: int,
+) -> ServiceCase:
+    service_case.status = status
+    service_case.admin_response = admin_response.strip() if admin_response else None
+    service_case.reviewed_by_user_id = reviewed_by_user_id
+    service_case.reviewed_at = utc_now()
+    service_case.closed_at = utc_now() if status in {"resolved", "closed", "rejected"} else None
+    service_case.updated_at = utc_now()
+    db.add(service_case)
+    db.commit()
+    db.refresh(service_case)
+    return service_case
 
 
 def update_conversation_state(

@@ -1,3 +1,4 @@
+import json
 from urllib.parse import urlsplit
 
 from pydantic import field_validator, model_validator
@@ -83,6 +84,14 @@ class Settings(BaseSettings):
         if v is None:
             return []
         if isinstance(v, str):
+            value = v.strip()
+            if value.startswith('['):
+                try:
+                    parsed = json.loads(value)
+                except json.JSONDecodeError:
+                    parsed = None
+                if isinstance(parsed, list):
+                    return [str(item).strip() for item in parsed if str(item).strip()]
             return [i.strip() for i in v.split(',') if i.strip()]
         return v
 

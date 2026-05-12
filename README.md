@@ -140,3 +140,10 @@ Base URL: `http://localhost:8000/api/v1`
 - `GET /users/me`
 - `PUT /users/me`
 - `POST /users/me/password`
+
+**PQRS / Postservicio**
+- `POST /service-cases/me` (cliente, solo sobre citas completadas y con liquidacion cerrada)
+- `GET /service-cases/my` (cliente)
+- `GET /service-cases/{id}` (cliente dueño o admin)
+- `GET /service-cases` (admin)
+- `POST /service-cases/{id}/review` (admin)

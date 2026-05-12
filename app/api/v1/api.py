@@ -10,6 +10,7 @@ from app.api.v1.routers import (
     chatbot,
     company,
     professionals,
+    service_cases,
     services,
     settlements,
     users,
@@ -26,5 +27,6 @@ api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(audit.router, prefix="/audit-logs", tags=["audit"])
 api_router.include_router(account_cancellation.router, prefix="/account-cancellation-requests", tags=["account"])
+api_router.include_router(service_cases.router, prefix="/service-cases", tags=["pqrs"])
 api_router.include_router(chatbot.router, prefix="/chatbot", tags=["chatbot"])
 api_router.include_router(company.router, tags=["public"])
