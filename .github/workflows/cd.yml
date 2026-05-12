@@ -55,7 +55,22 @@ jobs:
         run: |
           IMAGE_URI="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/aura-spa-backend:${IMAGE_TAG}"
           echo "IMAGE_URI=${IMAGE_URI}" >> "$GITHUB_ENV"
-          gcloud builds submit --tag "${IMAGE_URI}" .
+          BUILD_ID=$(gcloud builds submit --async --format='value(metadata.build.id)' --tag "${IMAGE_URI}" .)
+          echo "BUILD_ID=${BUILD_ID}" >> "$GITHUB_ENV"
+
+      - name: Wait for Cloud Build
+        run: |
+          while true; do
+            STATUS=$(gcloud builds describe "${BUILD_ID}" --format='value(status)')
+            echo "Cloud Build status: ${STATUS}"
+            if [ "${STATUS}" = "SUCCESS" ]; then
+              break
+            fi
+            if [ "${STATUS}" = "FAILURE" ] || [ "${STATUS}" = "INTERNAL_ERROR" ] || [ "${STATUS}" = "TIMEOUT" ] || [ "${STATUS}" = "CANCELLED" ] || [ "${STATUS}" = "EXPIRED" ]; then
+              exit 1
+            fi
+            sleep 10
+          done
 
       - name: Update migration job
         run: |
