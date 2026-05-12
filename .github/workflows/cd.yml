@@ -49,13 +49,16 @@ jobs:
           ${{ secrets.BACKEND_ENV_YAML }}
           EOF
 
-      - name: Build and push image
+      - name: Build Docker image
         env:
           IMAGE_TAG: backend-${{ github.sha }}
         run: |
           IMAGE_URI="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/aura-spa-backend:${IMAGE_TAG}"
           echo "IMAGE_URI=${IMAGE_URI}" >> "$GITHUB_ENV"
-          gcloud builds submit --tag "${IMAGE_URI}" .
+          docker build -t "${IMAGE_URI}" .
+
+      - name: Push Docker image
+        run: docker push "${IMAGE_URI}"
 
       - name: Update migration job
         run: |
