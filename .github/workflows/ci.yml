@@ -1,0 +1,37 @@
+name: Backend CI
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Static smoke check
+        run: python -m compileall app
+
+      - name: Run tests
+        env:
+          DATABASE_URL: sqlite:///./test_unit.db
+          SECRET_KEY: test-secret-key-for-unit-tests-only-32chars
+          GROQ_API_KEY: ""
+        run: python -m pytest -q

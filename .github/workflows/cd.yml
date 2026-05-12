@@ -1,0 +1,111 @@
+name: Backend CD
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+concurrency:
+  group: aura-spa-backend-cd
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
+  ARTIFACT_REPOSITORY: ${{ vars.ARTIFACT_REPOSITORY }}
+  CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_BACKEND_SERVICE }}
+  CLOUD_RUN_MIGRATION_JOB: ${{ vars.CLOUD_RUN_BACKEND_MIGRATION_JOB }}
+  CLOUD_SQL_INSTANCE: ${{ vars.CLOUD_SQL_INSTANCE }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Configure Docker auth
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Generate deployment env file
+        run: |
+          cat <<'EOF' > backend-env.yaml
+          ${{ secrets.BACKEND_ENV_YAML }}
+          EOF
+
+      - name: Build Docker image
+        env:
+          IMAGE_TAG: backend-${{ github.sha }}
+        run: |
+          ARTIFACT_REPOSITORY_CLEAN=$(printf '%s' "${ARTIFACT_REPOSITORY}" | xargs)
+          IMAGE_URI="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY_CLEAN}/aura-spa-backend:${IMAGE_TAG}"
+          echo "IMAGE_URI=${IMAGE_URI}" >> "$GITHUB_ENV"
+          OUTPUT=$(gcloud builds submit --async --format='value(metadata.build.id)' --tag "${IMAGE_URI}" . 2>&1) || {
+            echo "${OUTPUT}"
+            ERROR_LINE=$(printf '%s\n' "${OUTPUT}" | tail -n 1)
+            echo "::error::${ERROR_LINE}"
+            exit 1
+          }
+          BUILD_ID=$(printf '%s\n' "${OUTPUT}" | sed -n 's|.*builds/\([a-f0-9-]\+\).*|\1|p' | head -n 1)
+          if [ -z "${BUILD_ID}" ]; then
+            echo "${OUTPUT}"
+            echo "::error::No se pudo extraer BUILD_ID de Cloud Build"
+            exit 1
+          fi
+          echo "BUILD_ID=${BUILD_ID}" >> "$GITHUB_ENV"
+
+      - name: Wait for Cloud Build
+        run: |
+          while true; do
+            STATUS=$(gcloud builds describe "${BUILD_ID}" --format='value(status)')
+            echo "Cloud Build status: ${STATUS}"
+            if [ "${STATUS}" = "SUCCESS" ]; then
+              break
+            fi
+            if [ "${STATUS}" = "FAILURE" ] || [ "${STATUS}" = "INTERNAL_ERROR" ] || [ "${STATUS}" = "TIMEOUT" ] || [ "${STATUS}" = "CANCELLED" ] || [ "${STATUS}" = "EXPIRED" ]; then
+              exit 1
+            fi
+            sleep 10
+          done
+
+      - name: Update migration job
+        run: |
+          gcloud run jobs deploy "${CLOUD_RUN_MIGRATION_JOB}" \
+            --image "${IMAGE_URI}" \
+            --region "${GCP_REGION}" \
+            --set-cloudsql-instances "${CLOUD_SQL_INSTANCE}" \
+            --env-vars-file backend-env.yaml \
+            --command python \
+            --args=-m \
+            --args=alembic \
+            --args=upgrade \
+            --args=head
+
+      - name: Run migrations
+        run: gcloud run jobs execute "${CLOUD_RUN_MIGRATION_JOB}" --region "${GCP_REGION}" --wait
+
+      - name: Deploy backend service
+        run: |
+          gcloud run deploy "${CLOUD_RUN_SERVICE}" \
+            --image "${IMAGE_URI}" \
+            --region "${GCP_REGION}" \
+            --platform managed \
+            --allow-unauthenticated \
+            --add-cloudsql-instances "${CLOUD_SQL_INSTANCE}" \
+            --env-vars-file backend-env.yaml

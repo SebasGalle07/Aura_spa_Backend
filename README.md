@@ -56,6 +56,31 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
+## CI/CD en GitHub Actions
+Este repositorio incluye dos workflows:
+
+- `Backend CI`: ejecuta compilacion basica y pruebas automaticas en cada `push` y `pull request`.
+- `Backend CD`: construye la imagen Docker, ejecuta migraciones y despliega a Cloud Run cuando hay `push` a `main` o `master`, o por ejecucion manual.
+
+### Variables de repositorio requeridas
+Configura en GitHub `Settings > Secrets and variables > Actions > Variables`:
+
+- `GCP_PROJECT_ID`
+- `GCP_REGION`
+- `ARTIFACT_REPOSITORY`
+- `CLOUD_RUN_BACKEND_SERVICE`
+- `CLOUD_RUN_BACKEND_MIGRATION_JOB`
+- `CLOUD_SQL_INSTANCE`
+
+### Secrets requeridos
+Configura en GitHub `Settings > Secrets and variables > Actions > Secrets`:
+
+- `GCP_WORKLOAD_IDENTITY_PROVIDER`
+- `GCP_SERVICE_ACCOUNT_EMAIL`
+- `BACKEND_ENV_YAML`
+
+`BACKEND_ENV_YAML` debe contener el mismo contenido del archivo local `backend-env.yaml`, en formato YAML multilínea.
+
 ## Documentacion interactiva
 - `http://localhost:8000/docs`
 
