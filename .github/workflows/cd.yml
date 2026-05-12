@@ -55,7 +55,13 @@ jobs:
         run: |
           IMAGE_URI="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/aura-spa-backend:${IMAGE_TAG}"
           echo "IMAGE_URI=${IMAGE_URI}" >> "$GITHUB_ENV"
-          BUILD_ID=$(gcloud builds submit --async --format='value(metadata.build.id)' --tag "${IMAGE_URI}" .)
+          OUTPUT=$(gcloud builds submit --async --format='value(metadata.build.id)' --tag "${IMAGE_URI}" . 2>&1) || {
+            echo "${OUTPUT}"
+            ERROR_LINE=$(printf '%s\n' "${OUTPUT}" | tail -n 1)
+            echo "::error::${ERROR_LINE}"
+            exit 1
+          }
+          BUILD_ID=$(printf '%s\n' "${OUTPUT}" | tail -n 1 | tr -d '\r')
           echo "BUILD_ID=${BUILD_ID}" >> "$GITHUB_ENV"
 
       - name: Wait for Cloud Build
