@@ -1,4 +1,4 @@
-from sqlalchemy import desc, select
+from sqlalchemy import desc, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.time import utc_now
@@ -9,6 +9,8 @@ from app.models.audit import (
     ChatbotMessage,
     ServiceCase,
 )
+from app.models.appointment import Appointment
+from app.models.settlement import ServiceSettlement
 from app.models.user import User
 
 
@@ -206,6 +208,39 @@ def update_service_case(
     db.commit()
     db.refresh(service_case)
     return service_case
+
+
+def list_eligible_service_case_appointments(
+    db: Session,
+    *,
+    client_user_id: int,
+    client_email: str,
+) -> list[tuple[Appointment, ServiceSettlement]]:
+    stmt = (
+        select(Appointment, ServiceSettlement)
+        .join(ServiceSettlement, ServiceSettlement.appointment_id == Appointment.id)
+        .where(
+            or_(
+                Appointment.client_user_id == client_user_id,
+                Appointment.client_email == client_email,
+            ),
+            Appointment.status == "completed",
+            ServiceSettlement.status == "settled",
+        )
+        .order_by(desc(Appointment.date), desc(Appointment.time), desc(Appointment.id))
+    )
+    rows = list(db.execute(stmt).all())
+    eligible: list[tuple[Appointment, ServiceSettlement]] = []
+    for appointment, settlement in rows:
+        open_case = get_open_service_case_by_appointment_for_client(
+            db,
+            appointment_id=appointment.id,
+            client_user_id=client_user_id,
+        )
+        if open_case:
+            continue
+        eligible.append((appointment, settlement))
+    return eligible
 
 
 def update_conversation_state(

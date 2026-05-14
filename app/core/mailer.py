@@ -493,3 +493,125 @@ def send_account_cancellation_confirmation_email(
         tone="default",
     )
     send_email(to_email, subject, text, html_body)
+
+
+def send_service_case_notification_email(
+    to_email: str,
+    *,
+    client_name: str,
+    client_email: str,
+    case_type: str,
+    subject_line: str,
+    description: str,
+    appointment_date: str,
+    appointment_time: str,
+    service_name: str,
+    professional_name: str,
+) -> None:
+    case_labels = {
+        "petition": "Petición",
+        "complaint": "Queja",
+        "claim": "Reclamo",
+        "suggestion": "Sugerencia",
+    }
+    case_label = case_labels.get(case_type, case_type)
+    subject = f"Aura Spa - Nueva PQRS registrada ({case_label.lower()})"
+    text = (
+        "Se registró una nueva PQRS postservicio.\n\n"
+        f"Cliente: {client_name}\n"
+        f"Correo: {client_email}\n"
+        f"Tipo: {case_label}\n"
+        f"Asunto: {subject_line}\n"
+        f"Descripción: {description}\n"
+        f"Cita: {appointment_date} {appointment_time}\n"
+        f"Servicio: {service_name}\n"
+        f"Profesional: {professional_name}\n"
+    )
+    html_body = _build_email_layout(
+        preheader="Se registró una nueva PQRS en Aura Spa.",
+        eyebrow="Seguimiento postservicio",
+        title="Nueva PQRS registrada",
+        intro_lines=[
+            "Se generó una nueva petición, queja, reclamo o sugerencia asociada a un servicio ya liquidado.",
+            "Revisa el panel administrativo para gestionar el caso.",
+        ],
+        details=[
+            ("Tipo", case_label),
+            ("Cliente", client_name),
+            ("Correo", client_email),
+            ("Asunto", subject_line),
+            ("Descripción", description),
+            ("Cita", f"{appointment_date} {appointment_time}"),
+            ("Servicio", service_name),
+            ("Profesional", professional_name),
+        ],
+        badge="Nueva PQRS",
+    )
+    send_email(to_email, subject, text, html_body)
+
+
+def send_service_case_response_email(
+    to_email: str,
+    *,
+    client_name: str,
+    case_type: str,
+    subject_line: str,
+    status: str,
+    admin_response: str,
+    service_name: str,
+    appointment_date: str,
+    appointment_time: str,
+) -> None:
+    case_labels = {
+        "petition": "Petición",
+        "complaint": "Queja",
+        "claim": "Reclamo",
+        "suggestion": "Sugerencia",
+    }
+    status_labels = {
+        "open": "Abierta",
+        "in_review": "En revisión",
+        "resolved": "Resuelta",
+        "closed": "Cerrada",
+        "rejected": "Rechazada",
+    }
+    case_label = case_labels.get(case_type, case_type)
+    status_label = status_labels.get(status, status)
+    follow_up_url = f"{settings.FRONTEND_APP_URL.rstrip('/')}/pqrs"
+    subject = f"Aura Spa - Actualización de tu PQRS ({status_label.lower()})"
+    text = (
+        f"Hola {client_name},\n\n"
+        "Tu PQRS postservicio fue actualizada por el equipo de Aura Spa.\n\n"
+        f"Tipo: {case_label}\n"
+        f"Asunto: {subject_line}\n"
+        f"Estado: {status_label}\n"
+        f"Servicio: {service_name}\n"
+        f"Cita: {appointment_date} {appointment_time}\n"
+        f"Respuesta del equipo: {admin_response}\n\n"
+        f"Puedes revisar el detalle en: {follow_up_url}"
+    )
+    html_body = _build_email_layout(
+        preheader="Tu PQRS fue actualizada por el equipo de Aura Spa.",
+        eyebrow="Respuesta a PQRS",
+        title="Tenemos una actualización para ti",
+        intro_lines=[
+            f"Hola {client_name}, el equipo de Aura Spa revisó tu caso postservicio.",
+            "Te compartimos el estado actual y la respuesta registrada.",
+        ],
+        details=[
+            ("Tipo", case_label),
+            ("Asunto", subject_line),
+            ("Estado", status_label),
+            ("Servicio", service_name),
+            ("Cita", f"{appointment_date} {appointment_time}"),
+            ("Respuesta", admin_response),
+        ],
+        cta_label="Ver mi PQRS",
+        cta_url=follow_up_url,
+        footer_lines=[
+            "Si tu caso ya fue resuelto, te sugerimos programar con tiempo tu próxima cita.",
+        ],
+        badge=status_label,
+        tone="success" if status in {"resolved", "closed"} else "default",
+    )
+    send_email(to_email, subject, text, html_body)

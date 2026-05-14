@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import Literal
 
 from app.schemas.common import BaseSchema
@@ -80,3 +81,16 @@ class ServiceCaseOut(BaseSchema):
     closed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class EligibleServiceCaseAppointmentOut(BaseSchema):
+    id: int
+    service_id: int
+    professional_id: int
+    date: str
+    time: str
+    status: str
+    settlement_id: int
+    total_amount: Decimal
+    deposit_amount: Decimal
+    paid_amount: Decimal

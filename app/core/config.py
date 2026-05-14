@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     SMTP_FROM_NAME: str = 'Aura Spa'
     SMTP_USE_TLS: bool = True
     GOOGLE_CLIENT_IDS: str | list[str] = ''
+    PQRS_ADMIN_EMAIL: str = "elizabeth.mayao@uqvirtual.edu.co"
 
     MEDIA_ROOT: str = 'media'
     MEDIA_URL: str = '/media'

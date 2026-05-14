@@ -1,22 +1,38 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from app.core.mailer import (
+    send_service_case_notification_email,
+    send_service_case_response_email,
+)
+from app.core.config import settings
 from app.core.security import get_current_user, require_roles
 from app.crud.audit import (
     create_audit_log,
     create_service_case,
     get_open_service_case_by_appointment_for_client,
     get_service_case,
+    list_eligible_service_case_appointments,
     list_service_cases,
     list_service_cases_by_client,
     update_service_case,
 )
+from app.crud.professional import get_professional
+from app.crud.service import get_service
 from app.crud.settlement import get_settlement_by_appointment
 from app.db.deps import get_db
 from app.models.appointment import Appointment
-from app.schemas.audit import ServiceCaseCreate, ServiceCaseOut, ServiceCaseUpdate
+from app.schemas.audit import (
+    EligibleServiceCaseAppointmentOut,
+    ServiceCaseCreate,
+    ServiceCaseOut,
+    ServiceCaseUpdate,
+)
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _get_owned_completed_and_settled_appointment(
@@ -42,6 +58,69 @@ def _get_owned_completed_and_settled_appointment(
             detail="La PQRS solo puede registrarse cuando la liquidacion del servicio este cerrada",
         )
     return appointment
+
+
+def _appointment_context(db: Session, appointment: Appointment) -> dict[str, str]:
+    service = get_service(db, appointment.service_id)
+    professional = get_professional(db, appointment.professional_id)
+    return {
+        "service_name": service.name if service else f"Servicio #{appointment.service_id}",
+        "professional_name": professional.name if professional else f"Profesional #{appointment.professional_id}",
+    }
+
+
+def _send_service_case_created_email_if_possible(
+    db: Session,
+    *,
+    appointment: Appointment,
+    current_user,
+    service_case,
+) -> None:
+    if not settings.smtp_enabled or not settings.PQRS_ADMIN_EMAIL:
+        return
+    try:
+        context = _appointment_context(db, appointment)
+        send_service_case_notification_email(
+            settings.PQRS_ADMIN_EMAIL,
+            client_name=appointment.client_name or current_user.name,
+            client_email=appointment.client_email or current_user.email,
+            case_type=service_case.case_type,
+            subject_line=service_case.subject,
+            description=service_case.description,
+            appointment_date=appointment.date,
+            appointment_time=appointment.time,
+            service_name=context["service_name"],
+            professional_name=context["professional_name"],
+        )
+    except Exception:
+        logger.exception("No fue posible enviar correo de nueva PQRS al administrador")
+
+
+def _send_service_case_response_email_if_possible(
+    db: Session,
+    *,
+    appointment: Appointment,
+    service_case,
+) -> None:
+    if not settings.smtp_enabled or not appointment.client_email:
+        return
+    if not service_case.admin_response:
+        return
+    try:
+        context = _appointment_context(db, appointment)
+        send_service_case_response_email(
+            appointment.client_email,
+            client_name=appointment.client_name,
+            case_type=service_case.case_type,
+            subject_line=service_case.subject,
+            status=service_case.status,
+            admin_response=service_case.admin_response,
+            service_name=context["service_name"],
+            appointment_date=appointment.date,
+            appointment_time=appointment.time,
+        )
+    except Exception:
+        logger.exception("No fue posible enviar correo de respuesta PQRS al cliente")
 
 
 @router.post("/me", response_model=ServiceCaseOut, dependencies=[Depends(require_roles("client"))])
@@ -94,6 +173,12 @@ def create_my_service_case(
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
     )
+    _send_service_case_created_email_if_possible(
+        db,
+        appointment=appointment,
+        current_user=current_user,
+        service_case=service_case,
+    )
     return service_case
 
 
@@ -103,6 +188,37 @@ def list_my_service_cases(
     current_user=Depends(get_current_user),
 ):
     return list_service_cases_by_client(db, current_user.id)
+
+
+@router.get(
+    "/my/eligible-appointments",
+    response_model=list[EligibleServiceCaseAppointmentOut],
+    dependencies=[Depends(require_roles("client"))],
+)
+def list_my_eligible_service_case_appointments(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    rows = list_eligible_service_case_appointments(
+        db,
+        client_user_id=current_user.id,
+        client_email=current_user.email,
+    )
+    return [
+        EligibleServiceCaseAppointmentOut(
+            id=appointment.id,
+            service_id=appointment.service_id,
+            professional_id=appointment.professional_id,
+            date=appointment.date,
+            time=appointment.time,
+            status=appointment.status,
+            settlement_id=settlement.id,
+            total_amount=settlement.total_amount,
+            deposit_amount=settlement.deposit_amount,
+            paid_amount=settlement.paid_amount,
+        )
+        for appointment, settlement in rows
+    ]
 
 
 @router.get("", response_model=list[ServiceCaseOut], dependencies=[Depends(require_roles("admin"))])
@@ -168,4 +284,11 @@ def review_service_case(
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
     )
+    appointment = db.get(Appointment, updated.appointment_id)
+    if appointment:
+        _send_service_case_response_email_if_possible(
+            db,
+            appointment=appointment,
+            service_case=updated,
+        )
     return updated
