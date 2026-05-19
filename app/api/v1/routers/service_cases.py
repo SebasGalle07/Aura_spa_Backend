@@ -19,11 +19,13 @@ from app.crud.audit import (
     list_service_cases_by_client,
     update_service_case,
 )
+from app.crud.benefit import create_benefit_from_service_case, get_active_or_reserved_benefit_for_client, get_any_benefit_for_client
 from app.crud.professional import get_professional
 from app.crud.service import get_service
 from app.crud.settlement import get_settlement_by_appointment
 from app.db.deps import get_db
 from app.models.appointment import Appointment
+from app.schemas.benefit import ClientBenefitOut
 from app.schemas.audit import (
     EligibleServiceCaseAppointmentOut,
     ServiceCaseCreate,
@@ -101,6 +103,7 @@ def _send_service_case_response_email_if_possible(
     *,
     appointment: Appointment,
     service_case,
+    benefit_granted=False,
 ) -> None:
     if not settings.smtp_enabled or not appointment.client_email:
         return
@@ -118,6 +121,7 @@ def _send_service_case_response_email_if_possible(
             service_name=context["service_name"],
             appointment_date=appointment.date,
             appointment_time=appointment.time,
+            benefit_granted=benefit_granted,
         )
     except Exception:
         logger.exception("No fue posible enviar correo de respuesta PQRS al cliente")
@@ -188,6 +192,23 @@ def list_my_service_cases(
     current_user=Depends(get_current_user),
 ):
     return list_service_cases_by_client(db, current_user.id)
+
+
+@router.get("/my/benefit", response_model=ClientBenefitOut | None, dependencies=[Depends(require_roles("client"))])
+def get_my_service_case_benefit(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    benefit = get_active_or_reserved_benefit_for_client(db, current_user.id)
+    if benefit:
+        db.commit()
+        db.refresh(benefit)
+        return benefit
+    benefit = get_any_benefit_for_client(db, current_user.id)
+    if benefit:
+        db.commit()
+        db.refresh(benefit)
+    return benefit
 
 
 @router.get(
@@ -285,10 +306,36 @@ def review_service_case(
         user_agent=request.headers.get("user-agent"),
     )
     appointment = db.get(Appointment, updated.appointment_id)
+    benefit_granted = False
+    if updated.case_type == "complaint" and updated.status == "resolved":
+        existing_benefit = get_any_benefit_for_client(db, updated.client_user_id)
+        if existing_benefit is None:
+            benefit = create_benefit_from_service_case(
+                db,
+                client_user_id=updated.client_user_id,
+                source_service_case_id=updated.id,
+            )
+            benefit_granted = True
+            create_audit_log(
+                db,
+                action="service_case_benefit_granted",
+                entity_type="client_benefit",
+                entity_id=benefit.id,
+                actor=current_user,
+                new_value={
+                    "client_user_id": updated.client_user_id,
+                    "source_service_case_id": updated.id,
+                    "discount_percent": str(benefit.discount_percent),
+                    "expires_at": benefit.expires_at.isoformat(),
+                },
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
+            )
     if appointment:
         _send_service_case_response_email_if_possible(
             db,
             appointment=appointment,
             service_case=updated,
+            benefit_granted=benefit_granted,
         )
     return updated

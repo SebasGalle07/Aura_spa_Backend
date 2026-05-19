@@ -40,7 +40,7 @@ def ensure_settlement_for_appointment(db: Session, appointment: Appointment, ser
     if appointment.status not in {APPOINTMENT_CONFIRMED, APPOINTMENT_RESCHEDULED}:
         raise HTTPException(status_code=409, detail="Solo reservas confirmadas o reprogramadas pueden liquidarse")
 
-    total_amount = _money(service.price)
+    total_amount = _money(appointment.final_price_amount or service.price)
     deposit_amount = _money(appointment.paid_amount or appointment.deposit_amount)
     balance_amount = max(total_amount - deposit_amount, Decimal("0"))
     status = SETTLEMENT_PENDING if balance_amount > Decimal("0") else SETTLEMENT_SETTLED

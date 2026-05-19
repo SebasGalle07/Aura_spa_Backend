@@ -77,6 +77,10 @@ class AppointmentOut(BaseSchema):
     status: AppointmentStatus
     payment_status: PaymentStatus = "pending"
     payment_due_at: datetime | None = None
+    service_price_amount: Decimal = Decimal("0")
+    discount_amount: Decimal = Decimal("0")
+    final_price_amount: Decimal = Decimal("0")
+    applied_benefit_id: int | None = None
     deposit_amount: Decimal = Decimal("0")
     balance_amount: Decimal = Decimal("0")
     paid_amount: Decimal = Decimal("0")

@@ -66,6 +66,8 @@ class Settings(BaseSettings):
     SMTP_USE_TLS: bool = True
     GOOGLE_CLIENT_IDS: str | list[str] = ''
     PQRS_ADMIN_EMAIL: str = "elizabeth.mayao@uqvirtual.edu.co"
+    PQRS_DISCOUNT_PERCENT: int = 10
+    PQRS_DISCOUNT_DAYS: int = 30
 
     MEDIA_ROOT: str = 'media'
     MEDIA_URL: str = '/media'

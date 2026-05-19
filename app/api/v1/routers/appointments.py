@@ -20,6 +20,12 @@ from app.crud.appointment import (
     list_payments_by_appointment,
     update_appointment,
 )
+from app.crud.benefit import (
+    get_active_or_reserved_benefit_for_client,
+    get_benefit,
+    reserve_benefit_for_appointment,
+    use_benefit_for_appointment,
+)
 from app.crud.professional import get_professional
 from app.crud.service import get_service
 from app.db.deps import get_db
@@ -143,6 +149,12 @@ def create_one(payload: AppointmentCreate, db: Session = Depends(get_db), curren
         client_name = payload.client_name or current_user.name
         client_email = payload.client_email or current_user.email
         client_phone = payload.client_phone or current_user.phone
+    benefit = None
+    if current_user.role == "client":
+        benefit = get_active_or_reserved_benefit_for_client(db, current_user.id)
+        if benefit and benefit.status == "reserved":
+            benefit = None
+
     data = prepare_pending_appointment_data(
         service,
         client_user_id=current_user.id if current_user.role == "client" else None,
@@ -153,6 +165,7 @@ def create_one(payload: AppointmentCreate, db: Session = Depends(get_db), curren
         date=payload.date,
         time=payload.time,
         notes=payload.notes,
+        benefit=benefit,
     )
 
     try:
@@ -162,6 +175,12 @@ def create_one(payload: AppointmentCreate, db: Session = Depends(get_db), curren
         raise HTTPException(status_code=409, detail="El horario ya fue reservado")
 
     add_history(appointment, "Reserva creada. Pendiente de pago")
+    if benefit:
+        reserve_benefit_for_appointment(db, benefit, appointment.id)
+        add_history(
+            appointment,
+            f"Beneficio PQRS aplicado: {int(benefit.discount_percent)}% de descuento sobre el servicio",
+        )
     add_status_log(
         db,
         appointment_id=appointment.id,
@@ -545,6 +564,10 @@ def confirm(appointment_id: int, payload: AppointmentNotes | None = None, db: Se
         actor_type="admin",
     )
     ensure_settlement_for_appointment(db, appointment, service)
+    if appointment.applied_benefit_id:
+        benefit = get_benefit(db, appointment.applied_benefit_id)
+        if benefit:
+            use_benefit_for_appointment(db, benefit, appointment.id)
     db.commit()
     db.refresh(appointment)
     return appointment

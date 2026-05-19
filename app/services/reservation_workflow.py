@@ -43,7 +43,15 @@ from app.crud.appointment import (
     update_appointment,
     update_payment,
 )
+from app.crud.benefit import (
+    get_benefit,
+    get_active_or_reserved_benefit_for_client,
+    release_benefit_for_appointment,
+    reserve_benefit_for_appointment,
+    use_benefit_for_appointment,
+)
 from app.models.appointment import Appointment, Payment
+from app.models.benefit import ClientBenefit
 from app.models.service import Service
 from app.monitoring.metrics import (
     observe_appointment_event,
@@ -57,6 +65,22 @@ from app.services.settlement_workflow import ensure_settlement_for_appointment
 def _to_minutes(time_str: str) -> int:
     hours, minutes = [int(x) for x in time_str.split(":")]
     return hours * 60 + minutes
+
+
+def _quantized_money(value: Decimal) -> Decimal:
+    return value.quantize(Decimal("0.01"))
+
+
+def _compute_booking_prices(service: Service, benefit: ClientBenefit | None = None) -> tuple[Decimal, Decimal, Decimal]:
+    service_price = _quantized_money(Decimal(str(service.price)))
+    discount_amount = Decimal("0.00")
+    if benefit and benefit.status == "active":
+        percent = Decimal(str(benefit.discount_percent)) / Decimal("100")
+        discount_amount = _quantized_money(service_price * percent)
+        if discount_amount > service_price:
+            discount_amount = service_price
+    final_price = max(service_price - discount_amount, Decimal("0.00"))
+    return service_price, discount_amount, final_price
 
 
 def _ensure_slot_available(
@@ -113,6 +137,8 @@ def expire_pending_appointments(db: Session, now: datetime | None = None, commit
         observe_appointment_event("expired", APPOINTMENT_EXPIRED)
         observe_appointment_transition(from_status, APPOINTMENT_EXPIRED)
         observe_payment_event(appointment.payment_provider, PAYMENT_EXPIRED)
+        if appointment.applied_benefit_id:
+            release_benefit_for_appointment(db, appointment.id)
     if commit and expirable:
         db.commit()
     return len(expirable)
@@ -129,6 +155,7 @@ def prepare_pending_appointment_data(
     date: str,
     time: str,
     notes: str | None = "",
+    benefit: ClientBenefit | None = None,
 ) -> dict:
     if not is_future_slot(date, time):
         raise HTTPException(status_code=422, detail="La reserva debe programarse en una fecha y hora futura")
@@ -140,9 +167,9 @@ def prepare_pending_appointment_data(
     if not client_phone or not client_phone.isdigit() or len(client_phone) != 10:
         raise HTTPException(status_code=422, detail="Debes registrar un telefono valido de 10 digitos para reservar")
 
-    deposit_amount = compute_deposit_amount(service.price)
-    total_price = Decimal(str(service.price))
-    balance_amount = max(total_price - deposit_amount, Decimal("0"))
+    service_price_amount, discount_amount, final_price_amount = _compute_booking_prices(service, benefit)
+    deposit_amount = compute_deposit_amount(int(final_price_amount))
+    balance_amount = max(final_price_amount - deposit_amount, Decimal("0"))
 
     return {
         "client_user_id": client_user_id,
@@ -156,6 +183,10 @@ def prepare_pending_appointment_data(
         "status": APPOINTMENT_PENDING_PAYMENT,
         "payment_status": PAYMENT_PENDING,
         "payment_due_at": compute_payment_due_at(),
+        "service_price_amount": service_price_amount,
+        "discount_amount": discount_amount,
+        "final_price_amount": final_price_amount,
+        "applied_benefit_id": benefit.id if benefit else None,
         "deposit_amount": deposit_amount,
         "balance_amount": balance_amount,
         "paid_amount": Decimal("0"),
@@ -292,6 +323,10 @@ def apply_payment_webhook(
             if not service:
                 raise HTTPException(status_code=404, detail="Servicio asociado a la reserva no encontrado")
             ensure_settlement_for_appointment(db, appointment, service)
+            if appointment.applied_benefit_id:
+                benefit = get_benefit(db, appointment.applied_benefit_id)
+                if benefit:
+                    use_benefit_for_appointment(db, benefit, appointment.id)
             observe_appointment_event("confirmed", APPOINTMENT_CONFIRMED)
             observe_appointment_transition(previous_status, APPOINTMENT_CONFIRMED)
             return appointment
@@ -319,6 +354,8 @@ def apply_payment_webhook(
                 actor_type="system",
             )
             add_history(appointment, "Pago aprobado fuera de tiempo. Reserva expirada")
+            if appointment.applied_benefit_id:
+                release_benefit_for_appointment(db, appointment.id)
             observe_appointment_event("expired_after_payment", APPOINTMENT_EXPIRED)
             observe_appointment_transition(previous_status, APPOINTMENT_EXPIRED)
             return appointment
@@ -384,6 +421,8 @@ def cancel_appointment(
     observe_appointment_transition(previous_status, APPOINTMENT_CANCELLED)
     if next_payment_status != previous_payment_status:
         observe_payment_event(appointment.payment_provider, next_payment_status)
+    if appointment.applied_benefit_id and next_payment_status != PAYMENT_APPROVED:
+        release_benefit_for_appointment(db, appointment.id)
     return appointment
 
 

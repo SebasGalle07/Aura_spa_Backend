@@ -509,7 +509,7 @@ def send_service_case_notification_email(
     professional_name: str,
 ) -> None:
     case_labels = {
-        "petition": "Petición",
+        "petition": "Peticion",
         "complaint": "Queja",
         "claim": "Reclamo",
         "suggestion": "Sugerencia",
@@ -517,22 +517,22 @@ def send_service_case_notification_email(
     case_label = case_labels.get(case_type, case_type)
     subject = f"Aura Spa - Nueva PQRS registrada ({case_label.lower()})"
     text = (
-        "Se registró una nueva PQRS postservicio.\n\n"
+        "Se registro una nueva PQRS postservicio.\n\n"
         f"Cliente: {client_name}\n"
         f"Correo: {client_email}\n"
         f"Tipo: {case_label}\n"
         f"Asunto: {subject_line}\n"
-        f"Descripción: {description}\n"
+        f"Descripcion: {description}\n"
         f"Cita: {appointment_date} {appointment_time}\n"
         f"Servicio: {service_name}\n"
         f"Profesional: {professional_name}\n"
     )
     html_body = _build_email_layout(
-        preheader="Se registró una nueva PQRS en Aura Spa.",
+        preheader="Se registro una nueva PQRS en Aura Spa.",
         eyebrow="Seguimiento postservicio",
         title="Nueva PQRS registrada",
         intro_lines=[
-            "Se generó una nueva petición, queja, reclamo o sugerencia asociada a un servicio ya liquidado.",
+            "Se genero una nueva peticion, queja, reclamo o sugerencia asociada a un servicio ya liquidado.",
             "Revisa el panel administrativo para gestionar el caso.",
         ],
         details=[
@@ -540,7 +540,7 @@ def send_service_case_notification_email(
             ("Cliente", client_name),
             ("Correo", client_email),
             ("Asunto", subject_line),
-            ("Descripción", description),
+            ("Descripcion", description),
             ("Cita", f"{appointment_date} {appointment_time}"),
             ("Servicio", service_name),
             ("Profesional", professional_name),
@@ -561,16 +561,17 @@ def send_service_case_response_email(
     service_name: str,
     appointment_date: str,
     appointment_time: str,
+    benefit_granted: bool = False,
 ) -> None:
     case_labels = {
-        "petition": "Petición",
+        "petition": "Peticion",
         "complaint": "Queja",
         "claim": "Reclamo",
         "suggestion": "Sugerencia",
     }
     status_labels = {
         "open": "Abierta",
-        "in_review": "En revisión",
+        "in_review": "En revision",
         "resolved": "Resuelta",
         "closed": "Cerrada",
         "rejected": "Rechazada",
@@ -578,7 +579,8 @@ def send_service_case_response_email(
     case_label = case_labels.get(case_type, case_type)
     status_label = status_labels.get(status, status)
     follow_up_url = f"{settings.FRONTEND_APP_URL.rstrip('/')}/pqrs"
-    subject = f"Aura Spa - Actualización de tu PQRS ({status_label.lower()})"
+    booking_url = f"{settings.FRONTEND_APP_URL.rstrip('/')}/book"
+    subject = f"Aura Spa - Actualizacion de tu PQRS ({status_label.lower()})"
     text = (
         f"Hola {client_name},\n\n"
         "Tu PQRS postservicio fue actualizada por el equipo de Aura Spa.\n\n"
@@ -588,16 +590,39 @@ def send_service_case_response_email(
         f"Servicio: {service_name}\n"
         f"Cita: {appointment_date} {appointment_time}\n"
         f"Respuesta del equipo: {admin_response}\n\n"
-        f"Puedes revisar el detalle en: {follow_up_url}"
     )
+    if benefit_granted:
+        text += (
+            f"Adicionalmente, activamos un beneficio unico del {settings.PQRS_DISCOUNT_PERCENT}% para tu proxima reserva.\n"
+            f"El beneficio vence en {settings.PQRS_DISCOUNT_DAYS} dias a partir de la resolucion.\n"
+            f"Puedes reservar desde: {booking_url}\n\n"
+        )
+    text += f"Puedes revisar el detalle en: {follow_up_url}"
+
+    intro_lines = [
+        f"Hola {client_name}, el equipo de Aura Spa reviso tu caso postservicio.",
+        "Te compartimos el estado actual y la respuesta registrada.",
+    ]
+    footer_lines = [
+        "Puedes revisar el detalle completo de tu PQRS desde la aplicacion.",
+    ]
+    cta_label = "Ver mi PQRS"
+    cta_url = follow_up_url
+    if benefit_granted:
+        intro_lines.append(
+            f"Tambien activamos un beneficio unico del {settings.PQRS_DISCOUNT_PERCENT}% para tu proxima reserva."
+        )
+        footer_lines.append(
+            f"El beneficio vence en {settings.PQRS_DISCOUNT_DAYS} dias y solo puede redimirse una vez."
+        )
+        cta_label = "Reservar mi proxima cita"
+        cta_url = booking_url
+
     html_body = _build_email_layout(
         preheader="Tu PQRS fue actualizada por el equipo de Aura Spa.",
         eyebrow="Respuesta a PQRS",
-        title="Tenemos una actualización para ti",
-        intro_lines=[
-            f"Hola {client_name}, el equipo de Aura Spa revisó tu caso postservicio.",
-            "Te compartimos el estado actual y la respuesta registrada.",
-        ],
+        title="Tenemos una actualizacion para ti",
+        intro_lines=intro_lines,
         details=[
             ("Tipo", case_label),
             ("Asunto", subject_line),
@@ -606,11 +631,9 @@ def send_service_case_response_email(
             ("Cita", f"{appointment_date} {appointment_time}"),
             ("Respuesta", admin_response),
         ],
-        cta_label="Ver mi PQRS",
-        cta_url=follow_up_url,
-        footer_lines=[
-            "Si tu caso ya fue resuelto, te sugerimos programar con tiempo tu próxima cita.",
-        ],
+        cta_label=cta_label,
+        cta_url=cta_url,
+        footer_lines=footer_lines,
         badge=status_label,
         tone="success" if status in {"resolved", "closed"} else "default",
     )
