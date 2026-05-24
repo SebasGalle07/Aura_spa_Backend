@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.time import utc_now
 from app.models.benefit import ClientBenefit
+from app.monitoring.metrics import observe_service_case_benefit_event
 
 BENEFIT_ACTIVE = "active"
 BENEFIT_RESERVED = "reserved"
@@ -23,6 +24,7 @@ def _expire_if_needed(db: Session, benefit: ClientBenefit | None) -> ClientBenef
         benefit.updated_at = utc_now()
         db.add(benefit)
         db.flush()
+        observe_service_case_benefit_event("expired", benefit.status)
     return benefit
 
 
@@ -91,6 +93,7 @@ def create_benefit_from_service_case(
     )
     db.add(benefit)
     db.flush()
+    observe_service_case_benefit_event("granted", benefit.status)
     return benefit
 
 
@@ -103,6 +106,7 @@ def reserve_benefit_for_appointment(db: Session, benefit: ClientBenefit, appoint
     benefit.updated_at = utc_now()
     db.add(benefit)
     db.flush()
+    observe_service_case_benefit_event("reserved", benefit.status)
     return benefit
 
 
@@ -117,6 +121,7 @@ def use_benefit_for_appointment(db: Session, benefit: ClientBenefit, appointment
     benefit.updated_at = utc_now()
     db.add(benefit)
     db.flush()
+    observe_service_case_benefit_event("used", benefit.status)
     return benefit
 
 
@@ -130,4 +135,5 @@ def release_benefit_for_appointment(db: Session, appointment_id: int) -> ClientB
         benefit.updated_at = utc_now()
         db.add(benefit)
         db.flush()
+        observe_service_case_benefit_event("released", benefit.status)
     return benefit

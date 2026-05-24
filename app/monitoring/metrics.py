@@ -51,6 +51,21 @@ SETTLEMENT_PAYMENTS_TOTAL = Counter(
     "Pagos finales registrados en liquidaciones.",
     ("method",),
 )
+SERVICE_CASE_EVENTS_TOTAL = Counter(
+    "aura_spa_service_case_events_total",
+    "Eventos del proceso PQRS por tipo de solicitud y estado.",
+    ("event", "case_type", "status"),
+)
+SERVICE_CASE_STATUS_TRANSITIONS_TOTAL = Counter(
+    "aura_spa_service_case_status_transitions_total",
+    "Transiciones de estado del proceso PQRS.",
+    ("case_type", "from_status", "to_status"),
+)
+SERVICE_CASE_BENEFIT_EVENTS_TOTAL = Counter(
+    "aura_spa_service_case_benefit_events_total",
+    "Eventos de beneficios generados por PQRS resueltas.",
+    ("event", "status"),
+)
 
 
 def _label_status(value: str | None) -> str:
@@ -121,3 +136,26 @@ def observe_settlement_event(event: str, status: str) -> None:
 
 def observe_settlement_payment(method: str | None) -> None:
     SETTLEMENT_PAYMENTS_TOTAL.labels(method=(method or "unknown").strip().lower()).inc()
+
+
+def observe_service_case_event(event: str, case_type: str | None, status: str | None) -> None:
+    SERVICE_CASE_EVENTS_TOTAL.labels(
+        event=event,
+        case_type=(case_type or "unknown").strip().lower(),
+        status=_label_status(status),
+    ).inc()
+
+
+def observe_service_case_transition(case_type: str | None, from_status: str | None, to_status: str | None) -> None:
+    SERVICE_CASE_STATUS_TRANSITIONS_TOTAL.labels(
+        case_type=(case_type or "unknown").strip().lower(),
+        from_status=_label_status(from_status),
+        to_status=_label_status(to_status),
+    ).inc()
+
+
+def observe_service_case_benefit_event(event: str, status: str | None) -> None:
+    SERVICE_CASE_BENEFIT_EVENTS_TOTAL.labels(
+        event=event,
+        status=_label_status(status),
+    ).inc()

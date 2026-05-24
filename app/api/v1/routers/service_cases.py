@@ -25,6 +25,7 @@ from app.crud.service import get_service
 from app.crud.settlement import get_settlement_by_appointment
 from app.db.deps import get_db
 from app.models.appointment import Appointment
+from app.monitoring.metrics import observe_service_case_event, observe_service_case_transition
 from app.schemas.benefit import ClientBenefitOut
 from app.schemas.audit import (
     EligibleServiceCaseAppointmentOut,
@@ -137,8 +138,10 @@ def create_my_service_case(
     subject = payload.subject.strip()
     description = payload.description.strip()
     if len(subject) < 5:
+        observe_service_case_event("validation_failed", payload.case_type, "subject_too_short")
         raise HTTPException(status_code=422, detail="El asunto debe tener al menos 5 caracteres")
     if len(description) < 15:
+        observe_service_case_event("validation_failed", payload.case_type, "description_too_short")
         raise HTTPException(status_code=422, detail="La descripcion debe tener al menos 15 caracteres")
 
     appointment = _get_owned_completed_and_settled_appointment(
@@ -183,6 +186,8 @@ def create_my_service_case(
         current_user=current_user,
         service_case=service_case,
     )
+    observe_service_case_event("created", service_case.case_type, service_case.status)
+    observe_service_case_transition(service_case.case_type, None, service_case.status)
     return service_case
 
 
@@ -277,8 +282,10 @@ def review_service_case(
     if not service_case:
         raise HTTPException(status_code=404, detail="PQRS no encontrada")
     if payload.status in {"resolved", "closed", "rejected"} and not (payload.admin_response or "").strip():
+        observe_service_case_event("validation_failed", service_case.case_type, "admin_response_required")
         raise HTTPException(status_code=422, detail="Debes registrar una respuesta administrativa para cerrar la PQRS")
 
+    previous_status = service_case.status
     old_value = {
         "status": service_case.status,
         "admin_response": service_case.admin_response,
@@ -338,4 +345,8 @@ def review_service_case(
             service_case=updated,
             benefit_granted=benefit_granted,
         )
+    observe_service_case_event("reviewed", updated.case_type, updated.status)
+    observe_service_case_transition(updated.case_type, previous_status, updated.status)
+    if benefit_granted:
+        observe_service_case_event("benefit_granted", updated.case_type, updated.status)
     return updated

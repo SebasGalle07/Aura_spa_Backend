@@ -20,6 +20,8 @@ services:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-AuraSpa2026!}
       GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_DEFAULT_LANGUAGE: es-ES
+      GF_DATE_FORMATS_DEFAULT_TIMEZONE: America/Bogota
       PROMETHEUS_URL: http://prometheus:9090
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
